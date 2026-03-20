@@ -3,11 +3,15 @@
 import type { MapResult, ContactsState, SortConfig, SortKey } from '@/types';
 import { ResultRow } from './ResultRow';
 
+type EmailFilter = 'all' | 'has_emails' | 'blank';
+
 interface Props {
   results: MapResult[];
   sortConfig: SortConfig;
   onSort: (key: SortKey) => void;
   contactsMap: Record<string, ContactsState>;
+  emailFilter: EmailFilter;
+  onEmailFilterChange: (f: EmailFilter) => void;
 }
 
 const IDLE: ContactsState = { status: 'idle' };
@@ -74,8 +78,17 @@ function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsS
   URL.revokeObjectURL(url);
 }
 
-export function ResultsTable({ results, sortConfig, onSort, contactsMap }: Props) {
-  const sorted = [...results].sort((a, b) => {
+export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFilter, onEmailFilterChange }: Props) {
+  // Apply email filter
+  const filtered = emailFilter === 'all'
+    ? results
+    : results.filter((r) => {
+        const cs = contactsMap[r.business_id];
+        const hasEmails = cs?.status === 'success' && cs.data.emails.length > 0;
+        return emailFilter === 'has_emails' ? hasEmails : !hasEmails;
+      });
+
+  const sorted = [...filtered].sort((a, b) => {
     const key = sortConfig.key;
     const aVal = a[key] ?? (key === 'name' ? '' : -Infinity);
     const bVal = b[key] ?? (key === 'name' ? '' : -Infinity);
@@ -87,7 +100,7 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap }: Props
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">{results.length} results</span>
+        <span className="text-sm font-medium text-gray-700">{filtered.length} of {results.length} results</span>
         <button
           onClick={() => exportToCsv(results, contactsMap)}
           className="flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
@@ -122,7 +135,20 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap }: Props
               <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Email</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <div className="flex items-center gap-2">
+                  Email
+                  <select
+                    value={emailFilter}
+                    onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
+                    className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="has_emails">Has Emails</option>
+                    <option value="blank">Blank</option>
+                  </select>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>

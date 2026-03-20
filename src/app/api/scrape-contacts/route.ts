@@ -1,5 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Recursively walk any JSON value and collect strings that look like emails
+function extractEmails(obj: unknown): string[] {
+  const found = new Set<string>();
+  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+
+  function walk(val: unknown) {
+    if (typeof val === 'string') {
+      const matches = val.match(emailRegex);
+      if (matches) matches.forEach((m) => found.add(m.toLowerCase()));
+    } else if (Array.isArray(val)) {
+      val.forEach(walk);
+    } else if (val && typeof val === 'object') {
+      Object.values(val).forEach(walk);
+    }
+  }
+
+  walk(obj);
+  return Array.from(found);
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const website = searchParams.get('website');
@@ -18,12 +38,22 @@ export async function GET(request: NextRequest) {
     cache: 'no-store',
   });
 
-  const data = await upstream.json();
+  const text = await upstream.text();
+  if (!text) {
+    return NextResponse.json({ emails: [] }, { status: 200 });
+  }
 
-  // Response shape: { status, data: [{ emails: string[], phone_numbers: [{value, sources}][] }] }
-  const record = Array.isArray(data.data) ? data.data[0] : null;
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // If response isn't JSON, scan raw text for emails
+    const emails = extractEmails(text);
+    return NextResponse.json({ emails }, { status: 200 });
+  }
 
-  const emails: string[] = (record?.emails ?? []).map((e: { value: string }) => e.value);
+  // Scan the entire response payload for any string containing @
+  const emails = extractEmails(data);
 
   return NextResponse.json({ emails }, { status: upstream.ok ? 200 : upstream.status });
 }
