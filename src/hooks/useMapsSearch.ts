@@ -52,11 +52,27 @@ export function useMapsSearch() {
         pairs.map(([kw, loc]) => fetchForKeywordAndLocation(params, kw, loc))
       );
 
-      const combined = perPair.flat();
-      const filtered =
-        params.minReviews > 0
-          ? combined.filter((r) => (r.review_count ?? 0) >= params.minReviews)
-          : combined;
+      let filtered = perPair.flat();
+
+      if (params.minReviews > 0) {
+        filtered = filtered.filter((r) => (r.review_count ?? 0) >= params.minReviews);
+      }
+      if (params.filterPermanentlyClosed !== 'any') {
+        const want = params.filterPermanentlyClosed === 'true';
+        filtered = filtered.filter((r) => Boolean(r.is_permanently_closed) === want);
+      }
+      if (params.filterTemporarilyClosed !== 'any') {
+        const want = params.filterTemporarilyClosed === 'true';
+        filtered = filtered.filter((r) => Boolean(r.is_temporarily_closed) === want);
+      }
+      if (params.category) {
+        const cat = params.category.toLowerCase();
+        filtered = filtered.filter((r) => {
+          const types = Array.isArray(r.types) ? r.types : r.types ? [r.types] : [];
+          return types.some((t) => t.toLowerCase().includes(cat));
+        });
+      }
+
       const list = filtered.slice(0, params.limit);
 
       setResults(list);

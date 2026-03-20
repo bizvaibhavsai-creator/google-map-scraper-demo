@@ -16,11 +16,14 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   const [language, setLanguage] = useState('en');
   const [limit, setLimit] = useState(20);
   const [minReviews, setMinReviews] = useState(0);
+  const [filterPermanentlyClosed, setFilterPermanentlyClosed] = useState<'any' | 'true' | 'false'>('any');
+  const [filterTemporarilyClosed, setFilterTemporarilyClosed] = useState<'any' | 'true' | 'false'>('any');
+  const [category, setCategory] = useState('');
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!keyword.trim() || !location.trim()) return;
-    onSearch({ keyword: keyword.trim(), location: location.trim(), country, language, limit, minReviews });
+    onSearch({ keyword: keyword.trim(), location: location.trim(), country, language, limit, minReviews, filterPermanentlyClosed, filterTemporarilyClosed, category: category.trim() });
   }
 
   return (
@@ -92,6 +95,40 @@ export function SearchForm({ onSearch, isLoading }: Props) {
             placeholder="0"
             value={minReviews}
             onChange={(e) => setMinReviews(Number(e.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-600">Permanently closed</label>
+          <select
+            value={filterPermanentlyClosed}
+            onChange={(e) => setFilterPermanentlyClosed(e.target.value as 'any' | 'true' | 'false')}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="any">Any</option>
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-600">Temporarily closed</label>
+          <select
+            value={filterTemporarilyClosed}
+            onChange={(e) => setFilterTemporarilyClosed(e.target.value as 'any' | 'true' | 'false')}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="any">Any</option>
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-600">Category <span className="text-gray-400 font-normal">(optional)</span></label>
+          <input
+            type="text"
+            placeholder="e.g. general contractor"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
