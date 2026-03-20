@@ -16,9 +16,11 @@ export function ResultRow({ result, contactsState }: Props) {
       {/* Name */}
       <td className="px-4 py-3 text-sm font-medium text-gray-900 align-top">
         {result.name}
-        {result.type && (
-          <div className="text-xs text-gray-400 font-normal mt-0.5">{result.type}</div>
-        )}
+      </td>
+
+      {/* Category */}
+      <td className="px-4 py-3 text-sm text-gray-600 align-top">
+        {result.type || '—'}
       </td>
 
       {/* Keyword */}
