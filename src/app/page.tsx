@@ -3,13 +3,12 @@
 import { useState, useCallback, useEffect } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
 import { useScrapeContacts } from '@/hooks/useScrapeContacts';
 import type { SortConfig, SortKey } from '@/types';
 
 export default function HomePage() {
-  const { results, status, error, search } = useMapsSearch();
+  const { results, status, error, progress, search, cancel } = useMapsSearch();
   const { contactsMap, scrape } = useScrapeContacts();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
 
@@ -37,9 +36,34 @@ export default function HomePage() {
       <SearchForm onSearch={search} isLoading={status === 'loading'} />
 
       {status === 'loading' && (
-        <div className="flex items-center gap-2 text-gray-500 text-sm">
-          <LoadingSpinner size="md" />
-          <span>Searching Google Maps…</span>
+        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-gray-700">
+              Scraping Google Maps… {progress ? `${progress.completed} / ${progress.total}` : ''}
+            </span>
+            <div className="flex items-center gap-3">
+              {progress?.etaSeconds != null && (
+                <span className="text-gray-500">
+                  ETA: {progress.etaSeconds >= 60
+                    ? `${Math.floor(progress.etaSeconds / 60)}m ${progress.etaSeconds % 60}s`
+                    : `${progress.etaSeconds}s`}
+                </span>
+              )}
+              <button
+                onClick={cancel}
+                className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${progress?.percent ?? 0}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-400">{progress?.percent ?? 0}% complete</p>
         </div>
       )}
 
