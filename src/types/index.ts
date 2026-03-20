@@ -24,7 +24,9 @@ export interface MapResult {
   working_hours: WorkingHours | null;
   place_id: string | null;
   timezone: string | null;
-  type: string | null;
+  types: string | string[] | null;
+  is_permanently_closed: boolean | null;
+  is_temporarily_closed: boolean | null;
   _location: string; // injected client-side to track which search location produced this result
   _keyword: string;  // injected client-side to track which keyword produced this result
 }

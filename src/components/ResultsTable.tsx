@@ -44,7 +44,7 @@ function SortableHeader({
 }
 
 function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsState>) {
-  const headers = ['Name', 'Category', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website', 'Emails'];
+  const headers = ['Name', 'Category', 'Status', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website', 'Emails'];
 
   const escape = (val: string | number | null | undefined) => {
     if (val == null) return '';
@@ -57,7 +57,9 @@ function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsS
   const rows = results.map((r) => {
     const contacts = contactsMap[r.business_id];
     const emails = contacts?.status === 'success' ? contacts.data.emails.join('; ') : '';
-    return [r.name, r.type, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website, emails]
+    const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
+    const status = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
+    return [r.name, category, status, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website, emails]
       .map(escape)
       .join(',');
   });
@@ -94,23 +96,25 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap }: Props
         </button>
       </div>
       <div className="overflow-x-auto overflow-y-auto max-h-[65vh]">
-        <table className="w-full table-fixed min-w-[1200px]">
+        <table className="w-full table-fixed min-w-[1350px]">
           <colgroup>
-            <col className="w-[150px]" />
+            <col className="w-[140px]" />
             <col className="w-[130px]" />
+            <col className="w-[120px]" />
             <col className="w-[100px]" />
             <col className="w-[100px]" />
-            <col className="w-[160px]" />
+            <col className="w-[150px]" />
             <col className="w-[110px]" />
             <col className="w-[65px]" />
             <col className="w-[70px]" />
-            <col className="w-[130px]" />
+            <col className="w-[120px]" />
             <col className="w-[180px]" />
           </colgroup>
           <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
             <tr>
               <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={onSort} />
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Category</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Keyword</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Location</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>

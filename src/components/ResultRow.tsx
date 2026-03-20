@@ -10,6 +10,12 @@ interface Props {
 export function ResultRow({ result, contactsState }: Props) {
   const rating = result.rating != null ? result.rating.toFixed(1) : '—';
   const reviews = result.review_count != null ? result.review_count.toLocaleString() : '—';
+  const category = Array.isArray(result.types) ? result.types.join(', ') : (result.types || '—');
+  const closedStatus = result.is_permanently_closed
+    ? 'Permanently Closed'
+    : result.is_temporarily_closed
+      ? 'Temporarily Closed'
+      : 'Open';
 
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -20,7 +26,20 @@ export function ResultRow({ result, contactsState }: Props) {
 
       {/* Category */}
       <td className="px-4 py-3 text-sm text-gray-600 align-top">
-        {result.type || '—'}
+        {category}
+      </td>
+
+      {/* Status */}
+      <td className="px-4 py-3 align-top">
+        <span className={`inline-block text-xs rounded px-2 py-0.5 ${
+          result.is_permanently_closed
+            ? 'bg-red-100 text-red-700'
+            : result.is_temporarily_closed
+              ? 'bg-yellow-100 text-yellow-700'
+              : 'bg-green-100 text-green-700'
+        }`}>
+          {closedStatus}
+        </span>
       </td>
 
       {/* Keyword */}
