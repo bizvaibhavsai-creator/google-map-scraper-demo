@@ -28,7 +28,10 @@ export default function HomePage() {
   return (
     <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Google Maps Scraper</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">Google Maps Scraper</h1>
+          <a href="/supabase" className="text-sm text-purple-600 hover:underline font-medium">Supabase Dashboard →</a>
+        </div>
         <p className="text-sm text-gray-500 mt-1">
           Search businesses on Google Maps and extract contact information from their websites.
         </p>
