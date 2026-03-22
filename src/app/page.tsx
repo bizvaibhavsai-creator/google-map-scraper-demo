@@ -4,20 +4,21 @@ import { useState, useCallback, useEffect } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
-import { useScrapeContacts } from '@/hooks/useScrapeContacts';
+import { useSupabaseEnrichment } from '@/hooks/useSupabaseEnrichment';
 import type { SortConfig, SortKey } from '@/types';
 
 export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
-  const { contactsMap, scrape } = useScrapeContacts();
+  const { contactsMap, insertAndEnrich } = useSupabaseEnrichment();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
   const [emailFilter, setEmailFilter] = useState<'all' | 'has_emails' | 'blank'>('all');
 
+  // When Maps results arrive, insert into Supabase and start enrichment
   useEffect(() => {
-    results.forEach((r) => {
-      if (r.website) scrape(r.business_id, r.website);
-    });
-  }, [results, scrape]);
+    if (results.length > 0) {
+      insertAndEnrich(results);
+    }
+  }, [results, insertAndEnrich]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>
