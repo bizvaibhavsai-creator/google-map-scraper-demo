@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
@@ -13,18 +13,17 @@ export default function HomePage() {
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
   const [emailFilter, setEmailFilter] = useState<'all' | 'has_emails' | 'blank'>('all');
 
-  // When Maps results arrive, insert into Supabase and start enrichment
-  useEffect(() => {
-    if (results.length > 0) {
-      insertAndEnrich(results);
-    }
-  }, [results, insertAndEnrich]);
-
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>
       prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
     );
   }, []);
+
+  const handlePushToSupabase = useCallback(() => {
+    if (results.length > 0) {
+      insertAndEnrich(results);
+    }
+  }, [results, insertAndEnrich]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -87,6 +86,7 @@ export default function HomePage() {
           contactsMap={contactsMap}
           emailFilter={emailFilter}
           onEmailFilterChange={setEmailFilter}
+          onPushToSupabase={handlePushToSupabase}
         />
       )}
     </main>

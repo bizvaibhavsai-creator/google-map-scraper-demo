@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { MapResult, ContactsState, SortConfig, SortKey } from '@/types';
 import { ResultRow } from './ResultRow';
 
@@ -12,6 +13,7 @@ interface Props {
   contactsMap: Record<string, ContactsState>;
   emailFilter: EmailFilter;
   onEmailFilterChange: (f: EmailFilter) => void;
+  onPushToSupabase: () => void;
 }
 
 const IDLE: ContactsState = { status: 'idle' };
@@ -78,7 +80,56 @@ function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsS
   URL.revokeObjectURL(url);
 }
 
-export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFilter, onEmailFilterChange }: Props) {
+function buildRowPayload(r: MapResult, contactsMap: Record<string, ContactsState>) {
+  const contacts = contactsMap[r.business_id];
+  const emails = contacts?.status === 'success' ? contacts.data.emails : [];
+  const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
+  const closedStatus = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
+  return {
+    name: r.name,
+    category,
+    status: closedStatus,
+    keyword: r._keyword,
+    location: r._location,
+    address: r.full_address,
+    phone: r.phone_number,
+    rating: r.rating,
+    reviews: r.review_count,
+    website: r.website,
+    emails,
+  };
+}
+
+async function pushToClay(
+  webhookUrl: string,
+  results: MapResult[],
+  contactsMap: Record<string, ContactsState>,
+  onProgress: (sent: number, total: number) => void,
+) {
+  const total = results.length;
+  for (let i = 0; i < total; i++) {
+    const payload = buildRowPayload(results[i], contactsMap);
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      mode: 'no-cors',
+    });
+    onProgress(i + 1, total);
+    // 1 row per second to stay within Clay webhook limits
+    if (i < total - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFilter, onEmailFilterChange, onPushToSupabase }: Props) {
+  const [supabasePushed, setSupabasePushed] = useState(false);
+  const [clayModal, setClayModal] = useState(false);
+  const [clayWebhook, setClayWebhook] = useState('');
+  const [clayProgress, setClayProgress] = useState<{ sent: number; total: number } | null>(null);
+  const [clayDone, setClayDone] = useState(false);
+
   // Apply email filter
   const filtered = emailFilter === 'all'
     ? results
@@ -97,17 +148,88 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
     return 0;
   });
 
+  const handleSupabase = () => {
+    onPushToSupabase();
+    setSupabasePushed(true);
+  };
+
+  const handleClayStart = async () => {
+    if (!clayWebhook.trim()) return;
+    setClayModal(false);
+    setClayDone(false);
+    setClayProgress({ sent: 0, total: results.length });
+    await pushToClay(clayWebhook.trim(), results, contactsMap, (sent, total) => {
+      setClayProgress({ sent, total });
+    });
+    setClayDone(true);
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
         <span className="text-sm font-medium text-gray-700">{filtered.length} of {results.length} results</span>
-        <button
-          onClick={() => exportToCsv(results, contactsMap)}
-          className="flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
-        >
-          ↓ Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportToCsv(results, contactsMap)}
+            className="flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={handleSupabase}
+            disabled={supabasePushed}
+            className="flex items-center gap-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            {supabasePushed ? 'Pushed to Supabase' : 'Push to Supabase'}
+          </button>
+          <button
+            onClick={() => setClayModal(true)}
+            disabled={clayProgress !== null && !clayDone}
+            className="flex items-center gap-1.5 text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            {clayProgress && !clayDone
+              ? `Pushing to Clay… ${clayProgress.sent}/${clayProgress.total}`
+              : clayDone
+                ? 'Pushed to Clay'
+                : 'Push to Clay'}
+          </button>
+        </div>
       </div>
+
+      {/* Clay webhook modal */}
+      {clayModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 shadow-xl w-full max-w-md space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800">Push to Clay</h3>
+            <p className="text-sm text-gray-500">
+              Enter your Clay webhook URL. Rows will be sent one per second.
+            </p>
+            <input
+              type="url"
+              placeholder="https://api.clay.com/v1/webhooks/..."
+              value={clayWebhook}
+              onChange={(e) => setClayWebhook(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setClayModal(false)}
+                className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClayStart}
+                disabled={!clayWebhook.trim()}
+                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                Start Push ({results.length} rows)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto overflow-y-auto max-h-[65vh]">
         <table className="w-full table-fixed min-w-[1350px]">
           <colgroup>
