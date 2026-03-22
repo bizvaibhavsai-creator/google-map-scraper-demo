@@ -4,14 +4,11 @@ import { useState, useCallback } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
-import { useSupabaseEnrichment } from '@/hooks/useSupabaseEnrichment';
 import type { SortConfig, SortKey } from '@/types';
 
 export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
-  const { contactsMap, insertAndEnrich } = useSupabaseEnrichment();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
-  const [emailFilter, setEmailFilter] = useState<'all' | 'has_emails' | 'blank'>('all');
 
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>
@@ -19,11 +16,14 @@ export default function HomePage() {
     );
   }, []);
 
-  const handlePushToSupabase = useCallback(() => {
-    if (results.length > 0) {
-      insertAndEnrich(results);
-    }
-  }, [results, insertAndEnrich]);
+  const handlePushToSupabase = useCallback(async () => {
+    if (results.length === 0) return;
+    await fetch('/api/supabase-insert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results }),
+    });
+  }, [results]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -83,9 +83,6 @@ export default function HomePage() {
           results={results}
           sortConfig={sortConfig}
           onSort={handleSort}
-          contactsMap={contactsMap}
-          emailFilter={emailFilter}
-          onEmailFilterChange={setEmailFilter}
           onPushToSupabase={handlePushToSupabase}
         />
       )}
