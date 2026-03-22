@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
 import { supabase } from '@/lib/supabase';
 
 interface BusinessRow {
@@ -23,10 +23,26 @@ interface BusinessRow {
 }
 
 type EnrichState = 'idle' | 'enriching' | 'done';
+type ScrapeState = 'idle' | 'scraping' | 'done';
 
 export default function SupabaseDashboard() {
   const [rows, setRows] = useState<BusinessRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Scrape form
+  const [keyword, setKeyword] = useState('');
+  const [location, setLocation] = useState('');
+  const [country, setCountry] = useState('us');
+  const [language, setLanguage] = useState('en');
+  const [limit, setLimit] = useState(20);
+  const [minReviews, setMinReviews] = useState(0);
+  const [filterPermanentlyClosed, setFilterPermanentlyClosed] = useState<'any' | 'true' | 'false'>('any');
+  const [filterTemporarilyClosed, setFilterTemporarilyClosed] = useState<'any' | 'true' | 'false'>('any');
+  const [category, setCategory] = useState('');
+  const [scrapeState, setScrapeState] = useState<ScrapeState>('idle');
+  const [scrapeResult, setScrapeResult] = useState<string | null>(null);
+
+  // Enrichment
   const [enrichState, setEnrichState] = useState<EnrichState>('idle');
   const [enrichProgress, setEnrichProgress] = useState<{ processed: number; remaining: number } | null>(null);
   const abortRef = useRef(false);
@@ -38,37 +54,70 @@ export default function SupabaseDashboard() {
   const [clayDone, setClayDone] = useState(false);
 
   // Load data
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('businesses')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5000);
-      setRows(data ?? []);
-      setLoading(false);
-    }
-    load();
-  }, []);
+  const loadData = async () => {
+    const { data } = await supabase
+      .from('businesses')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10000);
+    setRows(data ?? []);
+    setLoading(false);
+  };
 
-  // Subscribe to real-time updates (emails enrichment)
+  useEffect(() => { loadData(); }, []);
+
+  // Real-time updates
   useEffect(() => {
     const channel = supabase
       .channel('dashboard-updates')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'businesses' },
-        (payload) => {
-          const updated = payload.new as BusinessRow;
-          setRows((prev) =>
-            prev.map((r) => (r.business_id === updated.business_id ? { ...r, ...updated } : r))
-          );
-        },
-      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'businesses' }, (payload) => {
+        const updated = payload.new as BusinessRow;
+        setRows((prev) =>
+          prev.map((r) => (r.business_id === updated.business_id ? { ...r, ...updated } : r))
+        );
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'businesses' }, (payload) => {
+        const inserted = payload.new as BusinessRow;
+        setRows((prev) => {
+          if (prev.some((r) => r.business_id === inserted.business_id)) return prev;
+          return [inserted, ...prev];
+        });
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Scrape directly to Supabase
+  const handleScrape = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!keyword.trim() || !location.trim()) return;
+
+    setScrapeState('scraping');
+    setScrapeResult(null);
+
+    const keywords = keyword.split(',').map((k) => k.trim()).filter(Boolean);
+    const locations = location.split(',').map((l) => l.trim()).filter(Boolean);
+
+    try {
+      const res = await fetch('/api/scrape-to-supabase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keywords, locations, country, language, limit, minReviews,
+          filterPermanentlyClosed, filterTemporarilyClosed, category: category.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setScrapeResult(`Inserted ${data.inserted} rows from ${data.pairs} keyword-location pairs`);
+      await loadData(); // refresh table
+    } catch (err) {
+      setScrapeResult(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setScrapeState('done');
+    }
+  };
 
   // Enrich emails
   const startEnrichment = async () => {
@@ -142,17 +191,9 @@ export default function SupabaseDashboard() {
       const r = rows[i];
       const status = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
       const payload = {
-        name: r.name,
-        category: r.types,
-        status,
-        keyword: r.keyword,
-        location: r.location,
-        address: r.full_address,
-        phone: r.phone_number,
-        rating: r.rating,
-        reviews: r.review_count,
-        website: r.website,
-        emails: (r.emails ?? []).join(', '),
+        name: r.name, category: r.types, status, keyword: r.keyword, location: r.location,
+        address: r.full_address, phone: r.phone_number, rating: r.rating, reviews: r.review_count,
+        website: r.website, emails: (r.emails ?? []).join(', '),
       };
       await fetch(clayWebhook.trim(), {
         method: 'POST',
@@ -161,9 +202,7 @@ export default function SupabaseDashboard() {
         mode: 'no-cors',
       });
       setClayProgress({ sent: i + 1, total });
-      if (i < total - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
+      if (i < total - 1) await new Promise((resolve) => setTimeout(resolve, 1000));
     }
     setClayDone(true);
   };
@@ -191,13 +230,78 @@ export default function SupabaseDashboard() {
         <a href="/" className="text-sm text-blue-600 hover:underline">Back to Scraper</a>
       </div>
 
+      {/* Scrape form — loads directly into Supabase */}
+      <form onSubmit={handleScrape} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
+        <h2 className="text-lg font-semibold text-gray-800">Scrape directly to Supabase</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Keywords <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+            <input type="text" placeholder="e.g. restaurant, dentist" value={keyword} onChange={(e) => setKeyword(e.target.value)} required
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Locations <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+            <input type="text" placeholder="e.g. 10001, 10002, 10003" value={location} onChange={(e) => setLocation(e.target.value)} required
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Country code</label>
+            <input type="text" placeholder="us" maxLength={2} value={country} onChange={(e) => setCountry(e.target.value.toLowerCase())}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Language code</label>
+            <input type="text" placeholder="en" maxLength={2} value={language} onChange={(e) => setLanguage(e.target.value.toLowerCase())}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Result limit per location</label>
+            <input type="number" min={1} value={limit} onChange={(e) => setLimit(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Min. reviews</label>
+            <input type="number" min={0} placeholder="0" value={minReviews} onChange={(e) => setMinReviews(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Permanently closed</label>
+            <select value={filterPermanentlyClosed} onChange={(e) => setFilterPermanentlyClosed(e.target.value as 'any' | 'true' | 'false')}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="any">Any</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Temporarily closed</label>
+            <select value={filterTemporarilyClosed} onChange={(e) => setFilterTemporarilyClosed(e.target.value as 'any' | 'true' | 'false')}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="any">Any</option>
+              <option value="true">True</option>
+              <option value="false">False</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-600">Category <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input type="text" placeholder="e.g. general contractor" value={category} onChange={(e) => setCategory(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <button type="submit" disabled={scrapeState === 'scraping'}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium px-5 py-2 rounded-lg text-sm transition-colors">
+          {scrapeState === 'scraping' ? 'Scraping…' : 'Scrape to Supabase'}
+        </button>
+        {scrapeResult && (
+          <p className={`text-sm ${scrapeResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>{scrapeResult}</p>
+        )}
+      </form>
+
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-2">
         {enrichState === 'idle' && pendingCount > 0 && (
-          <button
-            onClick={startEnrichment}
-            className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-          >
+          <button onClick={startEnrichment}
+            className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg transition-colors">
             Enrich Emails ({pendingCount} pending)
           </button>
         )}
@@ -206,10 +310,8 @@ export default function SupabaseDashboard() {
             <span className="text-sm text-indigo-700 font-medium">
               Enriching… {enrichProgress ? `${enrichProgress.processed} done, ${enrichProgress.remaining} remaining` : ''}
             </span>
-            <button
-              onClick={cancelEnrichment}
-              className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors"
-            >
+            <button onClick={cancelEnrichment}
+              className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors">
               Stop
             </button>
           </div>
@@ -218,23 +320,14 @@ export default function SupabaseDashboard() {
           <span className="text-sm text-green-700 font-medium">Enrichment complete</span>
         )}
 
-        <button
-          onClick={exportCsv}
-          className="text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-        >
+        <button onClick={exportCsv}
+          className="text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-colors">
           Export CSV
         </button>
 
-        <button
-          onClick={() => setClayModal(true)}
-          disabled={clayProgress !== null && !clayDone}
-          className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          {clayProgress && !clayDone
-            ? `Pushing to Clay… ${clayProgress.sent}/${clayProgress.total}`
-            : clayDone
-              ? 'Pushed to Clay'
-              : 'Push to Clay'}
+        <button onClick={() => setClayModal(true)} disabled={clayProgress !== null && !clayDone}
+          className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors">
+          {clayProgress && !clayDone ? `Pushing to Clay… ${clayProgress.sent}/${clayProgress.total}` : clayDone ? 'Pushed to Clay' : 'Push to Clay'}
         </button>
       </div>
 
@@ -244,20 +337,12 @@ export default function SupabaseDashboard() {
           <div className="bg-white rounded-xl p-6 shadow-xl w-full max-w-md space-y-4">
             <h3 className="text-lg font-semibold text-gray-800">Push to Clay</h3>
             <p className="text-sm text-gray-500">Enter your Clay webhook URL. Rows will be sent one per second, including enriched emails.</p>
-            <input
-              type="url"
-              placeholder="https://api.clay.com/v1/webhooks/..."
-              value={clayWebhook}
-              onChange={(e) => setClayWebhook(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+            <input type="url" placeholder="https://api.clay.com/v1/webhooks/..." value={clayWebhook} onChange={(e) => setClayWebhook(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             <div className="flex justify-end gap-2">
               <button onClick={() => setClayModal(false)} className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg">Cancel</button>
-              <button
-                onClick={pushToClay}
-                disabled={!clayWebhook.trim()}
-                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-              >
+              <button onClick={pushToClay} disabled={!clayWebhook.trim()}
+                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors">
                 Start Push ({rows.length} rows)
               </button>
             </div>
@@ -301,11 +386,7 @@ export default function SupabaseDashboard() {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const status = r.is_permanently_closed
-                  ? 'Permanently Closed'
-                  : r.is_temporarily_closed
-                    ? 'Temporarily Closed'
-                    : 'Open';
+                const status = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
                 const emails = (r.emails ?? []).join(', ');
                 return (
                   <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -313,9 +394,7 @@ export default function SupabaseDashboard() {
                     <td className="px-3 py-2 text-sm text-gray-600">{r.types || '—'}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-block text-xs rounded px-2 py-0.5 ${
-                        r.is_permanently_closed ? 'bg-red-100 text-red-700'
-                          : r.is_temporarily_closed ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-green-100 text-green-700'
+                        r.is_permanently_closed ? 'bg-red-100 text-red-700' : r.is_temporarily_closed ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
                       }`}>{status}</span>
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-600">{r.keyword || '—'}</td>
@@ -325,19 +404,12 @@ export default function SupabaseDashboard() {
                     <td className="px-3 py-2 text-sm text-gray-600">{r.rating ?? '—'}</td>
                     <td className="px-3 py-2 text-sm text-gray-600">{r.review_count ?? '—'}</td>
                     <td className="px-3 py-2 text-xs text-blue-600 break-all">
-                      {r.website ? (
-                        <a href={r.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {r.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      ) : '—'}
+                      {r.website ? <a href={r.website} target="_blank" rel="noopener noreferrer" className="hover:underline">{r.website.replace(/^https?:\/\//, '')}</a> : '—'}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-700 break-all">{emails || '—'}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-block text-xs rounded px-2 py-0.5 ${
-                        r.enrichment_status === 'done' ? 'bg-green-100 text-green-700'
-                          : r.enrichment_status === 'processing' ? 'bg-blue-100 text-blue-700'
-                            : r.enrichment_status === 'error' ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-600'
+                        r.enrichment_status === 'done' ? 'bg-green-100 text-green-700' : r.enrichment_status === 'processing' ? 'bg-blue-100 text-blue-700' : r.enrichment_status === 'error' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                       }`}>{r.enrichment_status}</span>
                     </td>
                   </tr>

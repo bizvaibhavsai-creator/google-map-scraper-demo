@@ -8,7 +8,7 @@ interface Props {
   results: MapResult[];
   sortConfig: SortConfig;
   onSort: (key: SortKey) => void;
-  onPushToSupabase: () => void;
+  onPushToSupabase: () => Promise<void>;
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
@@ -102,6 +102,7 @@ async function pushToClay(
 }
 
 export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: Props) {
+  const [supabasePushing, setSupabasePushing] = useState(false);
   const [supabasePushed, setSupabasePushed] = useState(false);
   const [clayModal, setClayModal] = useState(false);
   const [clayWebhook, setClayWebhook] = useState('');
@@ -117,9 +118,17 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
     return 0;
   });
 
-  const handleSupabase = () => {
-    onPushToSupabase();
-    setSupabasePushed(true);
+  const handleSupabase = async () => {
+    setSupabasePushing(true);
+    try {
+      await onPushToSupabase();
+      setSupabasePushed(true);
+      window.open('/supabase', '_blank');
+    } catch (err) {
+      console.error('Failed to push to Supabase:', err);
+    } finally {
+      setSupabasePushing(false);
+    }
   };
 
   const handleClayStart = async () => {
@@ -146,10 +155,10 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
           </button>
           <button
             onClick={handleSupabase}
-            disabled={supabasePushed}
+            disabled={supabasePushing || supabasePushed}
             className="flex items-center gap-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
           >
-            {supabasePushed ? 'Pushed to Supabase' : 'Push to Supabase'}
+            {supabasePushing ? 'Pushing…' : supabasePushed ? 'Pushed to Supabase' : 'Push to Supabase'}
           </button>
           <button
             onClick={() => setClayModal(true)}
