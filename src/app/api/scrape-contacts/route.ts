@@ -33,27 +33,40 @@ export async function GET(request: NextRequest) {
   url.searchParams.set('match_email_domain', 'true');
   url.searchParams.set('external_matching', 'true');
 
-  const upstream = await fetch(url.toString(), {
-    headers: { 'Scraper-Key': process.env.SCRAPER_API_KEY! },
-    cache: 'no-store',
-  });
+  // 8 second timeout — must finish before Vercel's 10s limit on Hobby plan
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
-  const text = await upstream.text();
-  if (!text) {
-    return NextResponse.json({ emails: [] }, { status: 200 });
-  }
-
-  let data: unknown;
   try {
-    data = JSON.parse(text);
-  } catch {
-    // If response isn't JSON, scan raw text for emails
-    const emails = extractEmails(text);
-    return NextResponse.json({ emails }, { status: 200 });
+    const upstream = await fetch(url.toString(), {
+      headers: { 'Scraper-Key': process.env.SCRAPER_API_KEY! },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    const text = await upstream.text();
+    if (!text) {
+      return NextResponse.json({ emails: [] }, { status: 200 });
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const emails = extractEmails(text);
+      return NextResponse.json({ emails }, { status: 200 });
+    }
+
+    const emails = extractEmails(data);
+    return NextResponse.json({ emails }, { status: upstream.ok ? 200 : upstream.status });
+  } catch (err) {
+    clearTimeout(timeout);
+    const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+    return NextResponse.json(
+      { emails: [], error: isTimeout ? 'timeout' : 'fetch_failed' },
+      { status: 200 }, // return 200 so client treats it as "no emails" not a fatal error
+    );
   }
-
-  // Scan the entire response payload for any string containing @
-  const emails = extractEmails(data);
-
-  return NextResponse.json({ emails }, { status: upstream.ok ? 200 : upstream.status });
 }

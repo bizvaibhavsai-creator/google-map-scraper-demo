@@ -3,14 +3,20 @@
 import { useState, useCallback, useRef } from 'react';
 import type { ContactsState } from '@/types';
 
-// Only 2 concurrent requests to stay well within Vercel's limits
-// Each request can take 3-10s, so 2 concurrent = ~2 serverless functions at a time
+// 2 concurrent to stay within Vercel serverless limits
 const CONCURRENCY = 2;
+const MAX_RETRIES = 2;
+
+interface QueueItem {
+  businessId: string;
+  website: string;
+  retries: number;
+}
 
 export function useScrapeContacts() {
   const [contactsMap, setContactsMap] = useState<Record<string, ContactsState>>({});
   const initiated = useRef<Set<string>>(new Set());
-  const queue = useRef<{ businessId: string; website: string }[]>([]);
+  const queue = useRef<QueueItem[]>([]);
   const running = useRef(0);
 
   const processQueue = useCallback(() => {
@@ -25,29 +31,33 @@ export function useScrapeContacts() {
           const qs = new URLSearchParams({ website: item.website });
           const res = await fetch(`/api/scrape-contacts?${qs}`);
           const text = await res.text();
-
-          if (!res.ok) {
-            throw new Error(text ? JSON.parse(text).error : `Request failed: ${res.status}`);
-          }
-
           const data = text ? JSON.parse(text) : { emails: [] };
 
-          setContactsMap((prev) => ({
-            ...prev,
-            [item.businessId]: {
-              status: 'success',
-              data: { emails: data.emails ?? [], phones: [] },
-            },
-          }));
-        } catch (err) {
-          initiated.current.delete(item.businessId);
-          setContactsMap((prev) => ({
-            ...prev,
-            [item.businessId]: {
-              status: 'error',
-              message: err instanceof Error ? err.message : 'Unknown error',
-            },
-          }));
+          // If the API returned a timeout/error flag but still 200, and we have retries left
+          if (data.error && item.retries < MAX_RETRIES) {
+            queue.current.push({ ...item, retries: item.retries + 1 });
+          } else {
+            setContactsMap((prev) => ({
+              ...prev,
+              [item.businessId]: {
+                status: 'success',
+                data: { emails: data.emails ?? [], phones: [] },
+              },
+            }));
+          }
+        } catch {
+          // Network error or parse error — retry if possible
+          if (item.retries < MAX_RETRIES) {
+            queue.current.push({ ...item, retries: item.retries + 1 });
+          } else {
+            setContactsMap((prev) => ({
+              ...prev,
+              [item.businessId]: {
+                status: 'success',
+                data: { emails: [], phones: [] },
+              },
+            }));
+          }
         } finally {
           running.current--;
           processQueue();
@@ -60,7 +70,7 @@ export function useScrapeContacts() {
     (businessId: string, website: string) => {
       if (initiated.current.has(businessId)) return;
       initiated.current.add(businessId);
-      queue.current.push({ businessId, website });
+      queue.current.push({ businessId, website, retries: 0 });
       processQueue();
     },
     [processQueue],
