@@ -32,21 +32,21 @@ export function useScrapeContacts() {
           const res = await fetch(`/api/scrape-contacts?${qs}`);
           const text = await res.text();
           const data = text ? JSON.parse(text) : { emails: [] };
+          const emails: string[] = data.emails ?? [];
 
-          // If the API returned a timeout/error flag but still 200, and we have retries left
-          if (data.error && item.retries < MAX_RETRIES) {
+          // Retry if: API flagged an error OR emails came back empty and we have retries left
+          if ((data.error || emails.length === 0) && item.retries < MAX_RETRIES) {
             queue.current.push({ ...item, retries: item.retries + 1 });
           } else {
             setContactsMap((prev) => ({
               ...prev,
               [item.businessId]: {
                 status: 'success',
-                data: { emails: data.emails ?? [], phones: [] },
+                data: { emails, phones: [] },
               },
             }));
           }
         } catch {
-          // Network error or parse error — retry if possible
           if (item.retries < MAX_RETRIES) {
             queue.current.push({ ...item, retries: item.retries + 1 });
           } else {
