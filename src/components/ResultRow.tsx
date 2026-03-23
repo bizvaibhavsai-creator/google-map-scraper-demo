@@ -3,7 +3,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 
 interface Props {
   result: MapResult;
-  contactsState: ContactsState;
+  contactsState?: ContactsState;
 }
 
 export function ResultRow({ result, contactsState }: Props) {
@@ -16,19 +16,21 @@ export function ResultRow({ result, contactsState }: Props) {
       ? 'Temporarily Closed'
       : 'Open';
 
-  // Derive email display
+  // Email display — only rendered when contactsState is provided
   let emailDisplay: React.ReactNode = '—';
-  if (!result.website) {
-    emailDisplay = <span className="text-gray-400 text-xs">No website</span>;
-  } else if (contactsState.status === 'idle' || contactsState.status === 'loading') {
-    emailDisplay = <LoadingSpinner size="sm" />;
-  } else if (contactsState.status === 'success') {
-    const emails = contactsState.data.emails;
-    emailDisplay = emails.length > 0
-      ? <span className="text-sm text-gray-700 break-all">{emails.join(', ')}</span>
-      : <span className="text-gray-400 text-xs">None found</span>;
-  } else if (contactsState.status === 'error') {
-    emailDisplay = <span className="text-red-400 text-xs">Error</span>;
+  if (contactsState) {
+    if (!result.website) {
+      emailDisplay = <span className="text-gray-400 text-xs">No website</span>;
+    } else if (contactsState.status === 'idle' || contactsState.status === 'loading') {
+      emailDisplay = <LoadingSpinner size="sm" />;
+    } else if (contactsState.status === 'success') {
+      const emails = contactsState.data.emails;
+      emailDisplay = emails.length > 0
+        ? <span className="text-sm text-gray-700 break-all">{emails.join(', ')}</span>
+        : <span className="text-gray-400 text-xs">None found</span>;
+    } else if (contactsState.status === 'error') {
+      emailDisplay = <span className="text-red-400 text-xs">Error</span>;
+    }
   }
 
   return (
@@ -73,7 +75,7 @@ export function ResultRow({ result, contactsState }: Props) {
           <span className="text-gray-400 text-xs italic">No website</span>
         )}
       </td>
-      <td className="px-4 py-3 align-top">{emailDisplay}</td>
+      {contactsState && <td className="px-4 py-3 align-top">{emailDisplay}</td>}
     </tr>
   );
 }

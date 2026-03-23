@@ -6,13 +6,16 @@ import { ResultRow } from './ResultRow';
 
 type EmailFilter = 'all' | 'has_emails' | 'blank';
 
+// Set to true to show email column and enable enrichment filtering
+const ENABLE_EMAILS = false;
+
 interface Props {
   results: MapResult[];
   sortConfig: SortConfig;
   onSort: (key: SortKey) => void;
-  contactsMap: Record<string, ContactsState>;
-  emailFilter: EmailFilter;
-  onEmailFilterChange: (f: EmailFilter) => void;
+  contactsMap?: Record<string, ContactsState>;
+  emailFilter?: EmailFilter;
+  onEmailFilterChange?: (f: EmailFilter) => void;
 }
 
 const IDLE: ContactsState = { status: 'idle' };
@@ -40,8 +43,9 @@ function SortableHeader({
   );
 }
 
-function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsState>) {
-  const headers = ['Name', 'Category', 'Status', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website', 'Emails'];
+function exportToCsv(results: MapResult[], contactsMap?: Record<string, ContactsState>) {
+  const headers = ['Name', 'Category', 'Status', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website'];
+  if (ENABLE_EMAILS) headers.push('Emails');
 
   const escape = (val: string | number | null | undefined) => {
     if (val == null) return '';
@@ -52,13 +56,14 @@ function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsS
   };
 
   const rows = results.map((r) => {
-    const contacts = contactsMap[r.business_id];
-    const emails = contacts?.status === 'success' ? contacts.data.emails.join('; ') : '';
     const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
     const status = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
-    return [r.name, category, status, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website, emails]
-      .map(escape)
-      .join(',');
+    const cols: (string | number | null | undefined)[] = [r.name, category, status, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website];
+    if (ENABLE_EMAILS && contactsMap) {
+      const contacts = contactsMap[r.business_id];
+      cols.push(contacts?.status === 'success' ? contacts.data.emails.join('; ') : '');
+    }
+    return cols.map(escape).join(',');
   });
 
   const csv = [headers.join(','), ...rows].join('\n');
@@ -71,20 +76,23 @@ function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsS
   URL.revokeObjectURL(url);
 }
 
-function buildRowPayload(r: MapResult, contactsMap: Record<string, ContactsState>) {
-  const contacts = contactsMap[r.business_id];
-  const emails = contacts?.status === 'success' ? contacts.data.emails.join(', ') : '';
+function buildRowPayload(r: MapResult, contactsMap?: Record<string, ContactsState>) {
   const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
   const closedStatus = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
-  return {
+  const payload: Record<string, unknown> = {
     name: r.name, category, status: closedStatus, keyword: r._keyword, location: r._location,
     address: r.full_address, phone: r.phone_number, rating: r.rating, reviews: r.review_count,
-    website: r.website, emails,
+    website: r.website,
   };
+  if (ENABLE_EMAILS && contactsMap) {
+    const contacts = contactsMap[r.business_id];
+    payload.emails = contacts?.status === 'success' ? contacts.data.emails.join(', ') : '';
+  }
+  return payload;
 }
 
 async function pushToClay(
-  webhookUrl: string, results: MapResult[], contactsMap: Record<string, ContactsState>,
+  webhookUrl: string, results: MapResult[], contactsMap: Record<string, ContactsState> | undefined,
   onProgress: (sent: number, total: number) => void,
 ) {
   const total = results.length;
@@ -101,19 +109,20 @@ async function pushToClay(
   }
 }
 
-export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFilter, onEmailFilterChange }: Props) {
+export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFilter = 'all', onEmailFilterChange }: Props) {
   const [clayModal, setClayModal] = useState(false);
   const [clayWebhook, setClayWebhook] = useState('');
   const [clayProgress, setClayProgress] = useState<{ sent: number; total: number } | null>(null);
   const [clayDone, setClayDone] = useState(false);
 
-  const filtered = emailFilter === 'all'
-    ? results
-    : results.filter((r) => {
+  // Email filtering — only applies when ENABLE_EMAILS is true
+  const filtered = (ENABLE_EMAILS && emailFilter !== 'all' && contactsMap)
+    ? results.filter((r) => {
         const cs = contactsMap[r.business_id];
         const hasEmails = cs?.status === 'success' && cs.data.emails.length > 0;
         return emailFilter === 'has_emails' ? hasEmails : !hasEmails;
-      });
+      })
+    : results;
 
   const sorted = [...filtered].sort((a, b) => {
     const key = sortConfig.key;
@@ -178,19 +187,19 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
       )}
 
       <div className="overflow-x-auto overflow-y-auto max-h-[65vh]">
-        <table className="w-full table-fixed min-w-[1400px]">
+        <table className="w-full table-fixed min-w-[1200px]">
           <colgroup>
             <col className="w-[140px]" />
             <col className="w-[120px]" />
             <col className="w-[110px]" />
-            <col className="w-[90px]" />
-            <col className="w-[90px]" />
-            <col className="w-[150px]" />
             <col className="w-[100px]" />
+            <col className="w-[100px]" />
+            <col className="w-[160px]" />
+            <col className="w-[110px]" />
             <col className="w-[65px]" />
             <col className="w-[65px]" />
-            <col className="w-[130px]" />
-            <col className="w-[200px]" />
+            <col className="w-[140px]" />
+            {ENABLE_EMAILS && <col className="w-[200px]" />}
           </colgroup>
           <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
             <tr>
@@ -204,20 +213,24 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
               <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                <div className="flex items-center gap-2">
-                  Emails
-                  <select
-                    value={emailFilter}
-                    onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
-                    className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="has_emails">Has Emails</option>
-                    <option value="blank">Blank</option>
-                  </select>
-                </div>
-              </th>
+              {ENABLE_EMAILS && (
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  <div className="flex items-center gap-2">
+                    Emails
+                    {onEmailFilterChange && (
+                      <select
+                        value={emailFilter}
+                        onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
+                        className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        <option value="all">All</option>
+                        <option value="has_emails">Has Emails</option>
+                        <option value="blank">Blank</option>
+                      </select>
+                    )}
+                  </div>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -225,7 +238,7 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
               <ResultRow
                 key={result.business_id}
                 result={result}
-                contactsState={contactsMap[result.business_id] ?? IDLE}
+                contactsState={ENABLE_EMAILS ? (contactsMap?.[result.business_id] ?? IDLE) : undefined}
               />
             ))}
           </tbody>

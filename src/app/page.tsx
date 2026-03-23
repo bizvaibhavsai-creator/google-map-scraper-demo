@@ -1,24 +1,24 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
-import { useScrapeContacts } from '@/hooks/useScrapeContacts';
+// Email enrichment hook kept but disabled — uncomment to re-enable
+// import { useScrapeContacts } from '@/hooks/useScrapeContacts';
 import type { SortConfig, SortKey } from '@/types';
 
 export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
-  const { contactsMap, scrape } = useScrapeContacts();
+  // const { contactsMap, scrape } = useScrapeContacts();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
-  const [emailFilter, setEmailFilter] = useState<'all' | 'has_emails' | 'blank'>('all');
 
-  // Auto-trigger email scraping for all results with websites
-  useEffect(() => {
-    results.forEach((r) => {
-      if (r.website) scrape(r.business_id, r.website);
-    });
-  }, [results, scrape]);
+  // Email scraping disabled — uncomment to re-enable
+  // useEffect(() => {
+  //   results.forEach((r) => {
+  //     if (r.website) scrape(r.business_id, r.website);
+  //   });
+  // }, [results, scrape]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>
@@ -31,7 +31,7 @@ export default function HomePage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Google Maps Scraper</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Search businesses on Google Maps and extract contact information from their websites.
+          Search businesses on Google Maps.
         </p>
       </div>
 
@@ -84,9 +84,6 @@ export default function HomePage() {
           results={results}
           sortConfig={sortConfig}
           onSort={handleSort}
-          contactsMap={contactsMap}
-          emailFilter={emailFilter}
-          onEmailFilterChange={setEmailFilter}
         />
       )}
     </main>
