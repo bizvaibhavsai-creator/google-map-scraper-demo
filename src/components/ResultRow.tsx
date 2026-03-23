@@ -1,10 +1,11 @@
-import type { MapResult } from '@/types';
+import type { MapResult, ContactsState } from '@/types';
 
 interface Props {
   result: MapResult;
+  contactsState: ContactsState;
 }
 
-export function ResultRow({ result }: Props) {
+export function ResultRow({ result, contactsState }: Props) {
   const rating = result.rating != null ? result.rating.toFixed(1) : '—';
   const reviews = result.review_count != null ? result.review_count.toLocaleString() : '—';
   const category = Array.isArray(result.types) ? result.types.join(', ') : (result.types || '—');
@@ -13,6 +14,21 @@ export function ResultRow({ result }: Props) {
     : result.is_temporarily_closed
       ? 'Temporarily Closed'
       : 'Open';
+
+  // Derive email display
+  let emailDisplay: React.ReactNode = '—';
+  if (!result.website) {
+    emailDisplay = <span className="text-gray-400 text-xs">No website</span>;
+  } else if (contactsState.status === 'loading') {
+    emailDisplay = <span className="text-gray-400 text-xs animate-pulse">Loading…</span>;
+  } else if (contactsState.status === 'success') {
+    const emails = contactsState.data.emails;
+    emailDisplay = emails.length > 0
+      ? <span className="text-sm text-gray-700 break-all">{emails.join(', ')}</span>
+      : <span className="text-gray-400 text-xs">None found</span>;
+  } else if (contactsState.status === 'error') {
+    emailDisplay = <span className="text-red-400 text-xs">Error</span>;
+  }
 
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -56,6 +72,7 @@ export function ResultRow({ result }: Props) {
           <span className="text-gray-400 text-xs italic">No website</span>
         )}
       </td>
+      <td className="px-4 py-3 align-top">{emailDisplay}</td>
     </tr>
   );
 }

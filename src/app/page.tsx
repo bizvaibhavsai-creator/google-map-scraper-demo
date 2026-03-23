@@ -1,14 +1,23 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
+import { useScrapeContacts } from '@/hooks/useScrapeContacts';
 import type { SortConfig, SortKey } from '@/types';
 
 export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
+  const { contactsMap, scrape } = useScrapeContacts();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
+
+  // Auto-trigger email scraping for all results with websites
+  useEffect(() => {
+    results.forEach((r) => {
+      if (r.website) scrape(r.business_id, r.website);
+    });
+  }, [results, scrape]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>
@@ -16,22 +25,10 @@ export default function HomePage() {
     );
   }, []);
 
-  const handlePushToSupabase = useCallback(async () => {
-    if (results.length === 0) return;
-    await fetch('/api/supabase-insert', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ results }),
-    });
-  }, [results]);
-
   return (
     <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
       <div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Google Maps Scraper</h1>
-          <a href="/supabase" className="text-sm text-purple-600 hover:underline font-medium">Supabase Dashboard →</a>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900">Google Maps Scraper</h1>
         <p className="text-sm text-gray-500 mt-1">
           Search businesses on Google Maps and extract contact information from their websites.
         </p>
@@ -86,7 +83,7 @@ export default function HomePage() {
           results={results}
           sortConfig={sortConfig}
           onSort={handleSort}
-          onPushToSupabase={handlePushToSupabase}
+          contactsMap={contactsMap}
         />
       )}
     </main>

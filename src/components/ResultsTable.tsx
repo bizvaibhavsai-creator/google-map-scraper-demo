@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import type { MapResult, SortConfig, SortKey } from '@/types';
+import type { MapResult, ContactsState, SortConfig, SortKey } from '@/types';
 import { ResultRow } from './ResultRow';
 
 interface Props {
   results: MapResult[];
   sortConfig: SortConfig;
   onSort: (key: SortKey) => void;
-  onPushToSupabase: () => Promise<void>;
+  contactsMap: Record<string, ContactsState>;
 }
+
+const IDLE: ContactsState = { status: 'idle' };
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   return (
@@ -34,8 +36,8 @@ function SortableHeader({
   );
 }
 
-function exportToCsv(results: MapResult[]) {
-  const headers = ['Name', 'Category', 'Status', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website'];
+function exportToCsv(results: MapResult[], contactsMap: Record<string, ContactsState>) {
+  const headers = ['Name', 'Category', 'Status', 'Keyword', 'Location', 'Address', 'Phone', 'Rating', 'Reviews', 'Website', 'Emails'];
 
   const escape = (val: string | number | null | undefined) => {
     if (val == null) return '';
@@ -46,9 +48,11 @@ function exportToCsv(results: MapResult[]) {
   };
 
   const rows = results.map((r) => {
+    const contacts = contactsMap[r.business_id];
+    const emails = contacts?.status === 'success' ? contacts.data.emails.join('; ') : '';
     const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
     const status = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
-    return [r.name, category, status, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website]
+    return [r.name, category, status, r._keyword, r._location, r.full_address, r.phone_number, r.rating, r.review_count, r.website, emails]
       .map(escape)
       .join(',');
   });
@@ -63,31 +67,25 @@ function exportToCsv(results: MapResult[]) {
   URL.revokeObjectURL(url);
 }
 
-function buildRowPayload(r: MapResult) {
+function buildRowPayload(r: MapResult, contactsMap: Record<string, ContactsState>) {
+  const contacts = contactsMap[r.business_id];
+  const emails = contacts?.status === 'success' ? contacts.data.emails.join(', ') : '';
   const category = Array.isArray(r.types) ? r.types.join(', ') : (r.types || '');
   const closedStatus = r.is_permanently_closed ? 'Permanently Closed' : r.is_temporarily_closed ? 'Temporarily Closed' : 'Open';
   return {
-    name: r.name,
-    category,
-    status: closedStatus,
-    keyword: r._keyword,
-    location: r._location,
-    address: r.full_address,
-    phone: r.phone_number,
-    rating: r.rating,
-    reviews: r.review_count,
-    website: r.website,
+    name: r.name, category, status: closedStatus, keyword: r._keyword, location: r._location,
+    address: r.full_address, phone: r.phone_number, rating: r.rating, reviews: r.review_count,
+    website: r.website, emails,
   };
 }
 
 async function pushToClay(
-  webhookUrl: string,
-  results: MapResult[],
+  webhookUrl: string, results: MapResult[], contactsMap: Record<string, ContactsState>,
   onProgress: (sent: number, total: number) => void,
 ) {
   const total = results.length;
   for (let i = 0; i < total; i++) {
-    const payload = buildRowPayload(results[i]);
+    const payload = buildRowPayload(results[i], contactsMap);
     await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,15 +93,11 @@ async function pushToClay(
       mode: 'no-cors',
     });
     onProgress(i + 1, total);
-    if (i < total - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
+    if (i < total - 1) await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
 
-export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: Props) {
-  const [supabasePushing, setSupabasePushing] = useState(false);
-  const [supabasePushed, setSupabasePushed] = useState(false);
+export function ResultsTable({ results, sortConfig, onSort, contactsMap }: Props) {
   const [clayModal, setClayModal] = useState(false);
   const [clayWebhook, setClayWebhook] = useState('');
   const [clayProgress, setClayProgress] = useState<{ sent: number; total: number } | null>(null);
@@ -118,25 +112,12 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
     return 0;
   });
 
-  const handleSupabase = async () => {
-    setSupabasePushing(true);
-    try {
-      await onPushToSupabase();
-      setSupabasePushed(true);
-      window.open('/supabase', '_blank');
-    } catch (err) {
-      console.error('Failed to push to Supabase:', err);
-    } finally {
-      setSupabasePushing(false);
-    }
-  };
-
   const handleClayStart = async () => {
     if (!clayWebhook.trim()) return;
     setClayModal(false);
     setClayDone(false);
     setClayProgress({ sent: 0, total: results.length });
-    await pushToClay(clayWebhook.trim(), results, (sent, total) => {
+    await pushToClay(clayWebhook.trim(), results, contactsMap, (sent, total) => {
       setClayProgress({ sent, total });
     });
     setClayDone(true);
@@ -148,17 +129,10 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
         <span className="text-sm font-medium text-gray-700">{results.length} results</span>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => exportToCsv(results)}
+            onClick={() => exportToCsv(results, contactsMap)}
             className="flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
           >
             Export CSV
-          </button>
-          <button
-            onClick={handleSupabase}
-            disabled={supabasePushing || supabasePushed}
-            className="flex items-center gap-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
-          >
-            {supabasePushing ? 'Pushing…' : supabasePushed ? 'Pushed to Supabase' : 'Push to Supabase'}
           </button>
           <button
             onClick={() => setClayModal(true)}
@@ -167,9 +141,7 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
           >
             {clayProgress && !clayDone
               ? `Pushing to Clay… ${clayProgress.sent}/${clayProgress.total}`
-              : clayDone
-                ? 'Pushed to Clay'
-                : 'Push to Clay'}
+              : clayDone ? 'Pushed to Clay' : 'Push to Clay'}
           </button>
         </div>
       </div>
@@ -179,20 +151,13 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
           <div className="bg-white rounded-xl p-6 shadow-xl w-full max-w-md space-y-4">
             <h3 className="text-lg font-semibold text-gray-800">Push to Clay</h3>
             <p className="text-sm text-gray-500">Enter your Clay webhook URL. Rows will be sent one per second.</p>
-            <input
-              type="url"
-              placeholder="https://api.clay.com/v1/webhooks/..."
-              value={clayWebhook}
+            <input type="url" placeholder="https://api.clay.com/v1/webhooks/..." value={clayWebhook}
               onChange={(e) => setClayWebhook(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setClayModal(false)} className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg transition-colors">Cancel</button>
-              <button
-                onClick={handleClayStart}
-                disabled={!clayWebhook.trim()}
-                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors"
-              >
+              <button onClick={() => setClayModal(false)} className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg">Cancel</button>
+              <button onClick={handleClayStart} disabled={!clayWebhook.trim()}
+                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors">
                 Start Push ({results.length} rows)
               </button>
             </div>
@@ -201,18 +166,19 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
       )}
 
       <div className="overflow-x-auto overflow-y-auto max-h-[65vh]">
-        <table className="w-full table-fixed min-w-[1200px]">
+        <table className="w-full table-fixed min-w-[1400px]">
           <colgroup>
             <col className="w-[140px]" />
-            <col className="w-[130px]" />
             <col className="w-[120px]" />
-            <col className="w-[100px]" />
-            <col className="w-[100px]" />
-            <col className="w-[160px]" />
             <col className="w-[110px]" />
-            <col className="w-[70px]" />
-            <col className="w-[70px]" />
-            <col className="w-[140px]" />
+            <col className="w-[90px]" />
+            <col className="w-[90px]" />
+            <col className="w-[150px]" />
+            <col className="w-[100px]" />
+            <col className="w-[65px]" />
+            <col className="w-[65px]" />
+            <col className="w-[130px]" />
+            <col className="w-[200px]" />
           </colgroup>
           <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
             <tr>
@@ -226,11 +192,16 @@ export function ResultsTable({ results, sortConfig, onSort, onPushToSupabase }: 
               <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
               <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Emails</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((result) => (
-              <ResultRow key={result.business_id} result={result} />
+              <ResultRow
+                key={result.business_id}
+                result={result}
+                contactsState={contactsMap[result.business_id] ?? IDLE}
+              />
             ))}
           </tbody>
         </table>
