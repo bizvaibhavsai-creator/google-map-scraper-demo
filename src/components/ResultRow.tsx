@@ -1,4 +1,5 @@
 import type { MapResult, ContactsState } from '@/types';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface Props {
   result: MapResult;
@@ -19,8 +20,8 @@ export function ResultRow({ result, contactsState }: Props) {
   let emailDisplay: React.ReactNode = '—';
   if (!result.website) {
     emailDisplay = <span className="text-gray-400 text-xs">No website</span>;
-  } else if (contactsState.status === 'loading') {
-    emailDisplay = <span className="text-gray-400 text-xs animate-pulse">Loading…</span>;
+  } else if (contactsState.status === 'idle' || contactsState.status === 'loading') {
+    emailDisplay = <LoadingSpinner size="sm" />;
   } else if (contactsState.status === 'success') {
     const emails = contactsState.data.emails;
     emailDisplay = emails.length > 0

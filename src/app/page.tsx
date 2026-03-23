@@ -11,6 +11,7 @@ export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
   const { contactsMap, scrape } = useScrapeContacts();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
+  const [emailFilter, setEmailFilter] = useState<'all' | 'has_emails' | 'blank'>('all');
 
   // Auto-trigger email scraping for all results with websites
   useEffect(() => {
@@ -84,6 +85,8 @@ export default function HomePage() {
           sortConfig={sortConfig}
           onSort={handleSort}
           contactsMap={contactsMap}
+          emailFilter={emailFilter}
+          onEmailFilterChange={setEmailFilter}
         />
       )}
     </main>
