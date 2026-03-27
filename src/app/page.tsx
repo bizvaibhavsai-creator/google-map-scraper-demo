@@ -4,7 +4,6 @@ import { useState, useCallback } from 'react';
 import { SearchForm } from '@/components/SearchForm';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useMapsSearch } from '@/hooks/useMapsSearch';
-// Email enrichment hook kept but disabled — uncomment to re-enable
 // import { useScrapeContacts } from '@/hooks/useScrapeContacts';
 import type { SortConfig, SortKey } from '@/types';
 
@@ -12,13 +11,6 @@ export default function HomePage() {
   const { results, status, error, progress, search, cancel } = useMapsSearch();
   // const { contactsMap, scrape } = useScrapeContacts();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', dir: 'asc' });
-
-  // Email scraping disabled — uncomment to re-enable
-  // useEffect(() => {
-  //   results.forEach((r) => {
-  //     if (r.website) scrape(r.business_id, r.website);
-  //   });
-  // }, [results, scrape]);
 
   const handleSort = useCallback((key: SortKey) => {
     setSortConfig((prev) =>

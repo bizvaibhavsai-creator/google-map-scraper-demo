@@ -3,77 +3,95 @@
 import { useState, useCallback, useRef } from 'react';
 import type { ContactsState } from '@/types';
 
-// 2 concurrent to stay within Vercel serverless limits
-const CONCURRENCY = 2;
-const MAX_RETRIES = 2;
-
-interface QueueItem {
-  businessId: string;
-  website: string;
-  retries: number;
-}
+const WORKER_URL = process.env.NEXT_PUBLIC_EMAIL_WORKER_URL || 'http://localhost:3001';
+const POLL_INTERVAL = 5000; // 5 seconds
 
 export function useScrapeContacts() {
   const [contactsMap, setContactsMap] = useState<Record<string, ContactsState>>({});
-  const initiated = useRef<Set<string>>(new Set());
-  const queue = useRef<QueueItem[]>([]);
-  const running = useRef(0);
+  const sentRef = useRef<Set<string>>(new Set());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastCompletedRef = useRef(0);
 
-  const processQueue = useCallback(() => {
-    while (running.current < CONCURRENCY && queue.current.length > 0) {
-      const item = queue.current.shift()!;
-      running.current++;
-
-      (async () => {
-        setContactsMap((prev) => ({ ...prev, [item.businessId]: { status: 'loading' } }));
-
-        try {
-          const qs = new URLSearchParams({ website: item.website });
-          const res = await fetch(`/api/scrape-contacts?${qs}`);
-          const text = await res.text();
-          const data = text ? JSON.parse(text) : { emails: [] };
-          const emails: string[] = data.emails ?? [];
-
-          // Retry if: API flagged an error OR emails came back empty and we have retries left
-          if ((data.error || emails.length === 0) && item.retries < MAX_RETRIES) {
-            queue.current.push({ ...item, retries: item.retries + 1 });
-          } else {
-            setContactsMap((prev) => ({
-              ...prev,
-              [item.businessId]: {
-                status: 'success',
-                data: { emails, phones: [] },
-              },
-            }));
-          }
-        } catch {
-          if (item.retries < MAX_RETRIES) {
-            queue.current.push({ ...item, retries: item.retries + 1 });
-          } else {
-            setContactsMap((prev) => ({
-              ...prev,
-              [item.businessId]: {
-                status: 'success',
-                data: { emails: [], phones: [] },
-              },
-            }));
-          }
-        } finally {
-          running.current--;
-          processQueue();
-        }
-      })();
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
     }
   }, []);
 
-  const scrape = useCallback(
-    (businessId: string, website: string) => {
-      if (initiated.current.has(businessId)) return;
-      initiated.current.add(businessId);
-      queue.current.push({ businessId, website, retries: 0 });
-      processQueue();
+  const poll = useCallback(
+    async (jobId: string) => {
+      try {
+        const res = await fetch(`${WORKER_URL}/enrich/${jobId}`);
+        const data = await res.json();
+
+        // Only update state when new results arrive
+        if (data.completed > lastCompletedRef.current) {
+          lastCompletedRef.current = data.completed;
+
+          setContactsMap((prev) => {
+            const next = { ...prev };
+            for (const [bizId, result] of Object.entries(data.results)) {
+              const r = result as { emails: string[] };
+              next[bizId] = {
+                status: 'success',
+                data: { emails: r.emails, phones: [] },
+              };
+            }
+            return next;
+          });
+        }
+
+        if (data.status === 'complete') {
+          stopPolling();
+        }
+      } catch {
+        // silently retry on next interval
+      }
     },
-    [processQueue],
+    [stopPolling],
+  );
+
+  const scrape = useCallback(
+    (items: Array<{ businessId: string; website: string }>) => {
+      const newItems = items.filter((i) => !sentRef.current.has(i.businessId));
+      if (newItems.length === 0) return;
+
+      newItems.forEach((i) => sentRef.current.add(i.businessId));
+
+      // Mark all as loading in one batch
+      setContactsMap((prev) => {
+        const next = { ...prev };
+        newItems.forEach((i) => {
+          next[i.businessId] = { status: 'loading' };
+        });
+        return next;
+      });
+
+      // POST entire batch to Railway worker
+      fetch(`${WORKER_URL}/enrich`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: newItems }),
+      })
+        .then((res) => res.json())
+        .then(({ jobId }) => {
+          stopPolling();
+          lastCompletedRef.current = 0;
+          pollRef.current = setInterval(() => poll(jobId), POLL_INTERVAL);
+          poll(jobId); // poll immediately too
+        })
+        .catch(() => {
+          setContactsMap((prev) => {
+            const next = { ...prev };
+            newItems.forEach((i) => {
+              next[i.businessId] = { status: 'success', data: { emails: [], phones: [] } };
+            });
+            return next;
+          });
+        });
+    },
+    [poll, stopPolling],
   );
 
   return { contactsMap, scrape };
