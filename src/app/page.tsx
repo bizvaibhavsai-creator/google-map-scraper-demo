@@ -33,7 +33,8 @@ export default function HomePage() {
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-gray-700">
-              Scraping Google Maps… {progress ? `${progress.completed} / ${progress.total}` : ''}
+              Scraping Google Maps… {progress ? `${progress.completed} / ${progress.total} pairs` : ''}
+              {results.length > 0 && <span className="text-gray-500 font-normal"> · {results.length} results</span>}
             </span>
             <div className="flex items-center gap-3">
               {progress?.etaSeconds != null && (
@@ -71,7 +72,7 @@ export default function HomePage() {
         <div className="text-sm text-gray-500 text-center py-8">No results found. Try a different keyword or location.</div>
       )}
 
-      {status === 'success' && results.length > 0 && (
+      {results.length > 0 && (
         <ResultsTable
           results={results}
           sortConfig={sortConfig}
