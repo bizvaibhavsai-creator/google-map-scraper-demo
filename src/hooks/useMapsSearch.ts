@@ -13,7 +13,7 @@ export interface SearchProgress {
 }
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
-const CONCURRENCY = 6;
+const CONCURRENCY = 10;
 
 function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   let filtered = raw;
