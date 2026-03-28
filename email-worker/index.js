@@ -3,10 +3,10 @@ import cors from 'cors';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 const EMAIL_CONCURRENCY = 5;
-const SEARCH_CONCURRENCY = 40;
+const SEARCH_CONCURRENCY = 10;
 const MAX_RETRIES = 2;
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 
@@ -14,16 +14,18 @@ const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 const emailJobs = new Map();
 const searchJobs = new Map();
 
-// Auto-cleanup jobs older than 1 hour
+// Auto-cleanup: completed jobs after 10 min, incomplete after 30 min
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of emailJobs) {
-    if (now - job.createdAt > 3_600_000) emailJobs.delete(id);
+    const maxAge = job.status === 'complete' ? 600_000 : 1_800_000;
+    if (now - job.createdAt > maxAge) emailJobs.delete(id);
   }
   for (const [id, job] of searchJobs) {
-    if (now - job.createdAt > 3_600_000) searchJobs.delete(id);
+    const maxAge = job.status === 'complete' ? 600_000 : 1_800_000;
+    if (now - job.createdAt > maxAge) searchJobs.delete(id);
   }
-}, 60_000);
+}, 30_000);
 
 function generateId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -108,6 +110,7 @@ async function processEmailJob(job) {
 
           if (job.completed === job.total) {
             job.status = 'complete';
+            delete job.items;
             resolve();
           } else {
             next();
@@ -152,7 +155,24 @@ async function fetchMapsSearch(keyword, location, params) {
     }
 
     const raw = Array.isArray(data) ? data : (data.data ?? data.results ?? []);
-    return raw.map((r) => ({ ...r, _location: location, _keyword: keyword }));
+    // Strip bulky fields (photos, working_hours, etc.) to avoid browser OOM on large scrapes
+    return raw.map((r) => ({
+      business_id: r.business_id,
+      name: r.name,
+      full_address: r.full_address,
+      phone_number: r.phone_number,
+      website: r.website,
+      rating: r.rating,
+      review_count: r.review_count,
+      types: r.types,
+      is_permanently_closed: r.is_permanently_closed,
+      is_temporarily_closed: r.is_temporarily_closed,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      place_id: r.place_id,
+      _location: location,
+      _keyword: keyword,
+    }));
   } catch {
     clearTimeout(timeout);
     return [];
@@ -189,6 +209,8 @@ async function processSearchJob(job) {
 
           if (job.completed === job.total) {
             job.status = 'complete';
+            delete job.pairs;
+            delete job.params;
             resolve();
           } else {
             next();
