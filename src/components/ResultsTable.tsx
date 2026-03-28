@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MapResult, ContactsState, SortConfig, SortKey } from '@/types';
 import { ResultRow } from './ResultRow';
 
@@ -186,64 +187,114 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
         </div>
       )}
 
-      <div className="overflow-x-auto overflow-y-auto max-h-[65vh]">
-        <table className="w-full table-fixed min-w-[1200px]">
-          <colgroup>
-            <col className="w-[140px]" />
-            <col className="w-[120px]" />
-            <col className="w-[110px]" />
-            <col className="w-[100px]" />
-            <col className="w-[100px]" />
-            <col className="w-[160px]" />
-            <col className="w-[110px]" />
-            <col className="w-[65px]" />
-            <col className="w-[65px]" />
-            <col className="w-[140px]" />
-            {ENABLE_EMAILS && <col className="w-[200px]" />}
-          </colgroup>
-          <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
-            <tr>
-              <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={onSort} />
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Category</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Keyword</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Location</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Phone</th>
-              <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
-              <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
-              {ENABLE_EMAILS && (
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                  <div className="flex items-center gap-2">
-                    Emails
-                    {onEmailFilterChange && (
-                      <select
-                        value={emailFilter}
-                        onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
-                        className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="all">All</option>
-                        <option value="has_emails">Has Emails</option>
-                        <option value="blank">Blank</option>
-                      </select>
-                    )}
-                  </div>
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((result) => (
+      <VirtualTable
+        sorted={sorted}
+        sortConfig={sortConfig}
+        onSort={onSort}
+        contactsMap={contactsMap}
+        emailFilter={emailFilter}
+        onEmailFilterChange={onEmailFilterChange}
+      />
+    </div>
+  );
+}
+
+const ROW_HEIGHT = 52;
+const OVERSCAN = 10;
+
+function VirtualTable({
+  sorted, sortConfig, onSort, contactsMap, emailFilter, onEmailFilterChange,
+}: {
+  sorted: MapResult[];
+  sortConfig: SortConfig;
+  onSort: (k: SortKey) => void;
+  contactsMap?: Record<string, ContactsState>;
+  emailFilter?: EmailFilter;
+  onEmailFilterChange?: (f: EmailFilter) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: OVERSCAN,
+  });
+
+  return (
+    <div ref={scrollRef} className="overflow-x-auto overflow-y-auto max-h-[65vh]">
+      <table className="w-full table-fixed min-w-[1200px]">
+        <colgroup>
+          <col className="w-[140px]" />
+          <col className="w-[120px]" />
+          <col className="w-[110px]" />
+          <col className="w-[100px]" />
+          <col className="w-[100px]" />
+          <col className="w-[160px]" />
+          <col className="w-[110px]" />
+          <col className="w-[65px]" />
+          <col className="w-[65px]" />
+          <col className="w-[140px]" />
+          {ENABLE_EMAILS && <col className="w-[200px]" />}
+        </colgroup>
+        <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
+          <tr>
+            <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={onSort} />
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Category</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Keyword</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Location</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Phone</th>
+            <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
+            <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
+            {ENABLE_EMAILS && (
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                <div className="flex items-center gap-2">
+                  Emails
+                  {onEmailFilterChange && (
+                    <select
+                      value={emailFilter}
+                      onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
+                      className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="has_emails">Has Emails</option>
+                      <option value="blank">Blank</option>
+                    </select>
+                  )}
+                </div>
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {/* Top spacer */}
+          {virtualizer.getVirtualItems().length > 0 && (
+            <tr><td style={{ height: virtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
+          )}
+          {virtualizer.getVirtualItems().map((vRow) => {
+            const result = sorted[vRow.index];
+            return (
               <ResultRow
                 key={result.business_id}
                 result={result}
                 contactsState={ENABLE_EMAILS ? (contactsMap?.[result.business_id] ?? IDLE) : undefined}
               />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+          {/* Bottom spacer */}
+          {virtualizer.getVirtualItems().length > 0 && (
+            <tr>
+              <td style={{
+                height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
+                padding: 0,
+              }} />
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

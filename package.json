@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.23",
     "next": "^16.2.0",
     "react": "^18",
     "react-dom": "^18"
