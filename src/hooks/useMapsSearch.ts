@@ -12,8 +12,8 @@ export interface SearchProgress {
   etaSeconds: number | null;
 }
 
-const WORKER_URL = process.env.NEXT_PUBLIC_EMAIL_WORKER_URL || 'http://localhost:3001';
-const POLL_INTERVAL = 3000;
+const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
+const CONCURRENCY = 6;
 
 function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   let filtered = raw;
@@ -40,138 +40,153 @@ function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   return filtered.slice(0, params.limit);
 }
 
+async function fetchPair(
+  keyword: string,
+  location: string,
+  params: { country: string; language: string; limit: number },
+): Promise<MapResult[]> {
+  const url = new URL(`${WORKER_URL}/api/search`);
+  url.searchParams.set('keyword', keyword);
+  url.searchParams.set('location', location);
+  url.searchParams.set('limit', String(params.limit));
+  url.searchParams.set('country', params.country);
+  url.searchParams.set('lang', params.language);
+
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
 export function useMapsSearch() {
   const [results, setResults] = useState<MapResult[]>([]);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<SearchProgress | null>(null);
   const abortRef = useRef(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const allResultsRef = useRef<MapResult[]>([]);
   const paramsRef = useRef<SearchParams | null>(null);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
   const cancel = useCallback(() => {
     abortRef.current = true;
-    stopPolling();
     setStatus('idle');
-  }, [stopPolling]);
+  }, []);
 
-  const poll = useCallback(
-    async (jobId: string, sinceRef: { current: number }, startTime: number) => {
-      if (abortRef.current) {
-        stopPolling();
-        return;
+  const search = useCallback(async (params: SearchParams) => {
+    abortRef.current = false;
+    setStatus('loading');
+    setError(null);
+    setResults([]);
+    setProgress(null);
+    allResultsRef.current = [];
+    paramsRef.current = params;
+
+    const keywords = params.keyword.split(',').map((k) => k.trim()).filter(Boolean);
+    const locations = params.location.split(',').map((l) => l.trim()).filter(Boolean);
+
+    const pairs: [string, string][] = [];
+    for (const kw of keywords) {
+      for (const loc of locations) {
+        pairs.push([kw, loc]);
       }
+    }
 
-      try {
-        const res = await fetch(`${WORKER_URL}/search/${jobId}?since=${sinceRef.current}`);
-        const data = await res.json();
+    if (pairs.length === 0) {
+      setStatus('success');
+      return;
+    }
 
-        // Append only new results
-        if (data.results.length > 0) {
-          allResultsRef.current.push(...data.results);
-          sinceRef.current = data.nextSince;
+    const total = pairs.length;
+    let completed = 0;
+    const startTime = Date.now();
+    const seen = new Set<string>();
+    // Throttle React state updates to avoid excessive re-renders on large scrapes
+    let updateTimer: ReturnType<typeof setTimeout> | null = null;
+    let dirty = false;
 
-          if (paramsRef.current) {
-            setResults(applyFilters(allResultsRef.current, paramsRef.current));
-          }
+    function scheduleUpdate() {
+      dirty = true;
+      if (updateTimer) return;
+      updateTimer = setTimeout(() => {
+        updateTimer = null;
+        if (!dirty) return;
+        dirty = false;
+        if (paramsRef.current) {
+          setResults(applyFilters(allResultsRef.current, paramsRef.current));
         }
-
-        // Update progress
         const elapsed = (Date.now() - startTime) / 1000;
-        const rate = data.completed / elapsed;
-        const remaining = data.total - data.completed;
-        const eta = rate > 0 ? Math.round(remaining / rate) : null;
-
+        const rate = completed / elapsed;
+        const remaining = total - completed;
         setProgress({
-          completed: data.completed,
-          total: data.total,
-          percent: Math.round((data.completed / data.total) * 100),
-          etaSeconds: eta,
+          completed,
+          total,
+          percent: Math.round((completed / total) * 100),
+          etaSeconds: rate > 0 ? Math.round(remaining / rate) : null,
+        });
+      }, 500);
+    }
+
+    setProgress({ completed: 0, total, percent: 0, etaSeconds: null });
+
+    // Process pairs with concurrency limit
+    let index = 0;
+
+    async function worker() {
+      while (index < pairs.length) {
+        if (abortRef.current) return;
+        const i = index++;
+        const [keyword, location] = pairs[i];
+
+        const results = await fetchPair(keyword, location, {
+          country: params.country,
+          language: params.language,
+          limit: params.limit,
         });
 
-        if (data.status === 'complete') {
-          stopPolling();
-          if (paramsRef.current) {
-            setResults(applyFilters(allResultsRef.current, paramsRef.current));
+        // Deduplicate and tag with keyword/location
+        for (const r of results) {
+          if (r.business_id && !seen.has(r.business_id)) {
+            seen.add(r.business_id);
+            allResultsRef.current.push({
+              ...r,
+              _location: location,
+              _keyword: keyword,
+            });
           }
-          setStatus('success');
         }
-      } catch {
-        // retry on next interval
+
+        completed++;
+        scheduleUpdate();
       }
-    },
-    [stopPolling],
-  );
+    }
 
-  const search = useCallback(
-    async (params: SearchParams) => {
-      abortRef.current = false;
-      stopPolling();
-      setStatus('loading');
-      setError(null);
-      setResults([]);
-      setProgress(null);
-      allResultsRef.current = [];
-      paramsRef.current = params;
-
-      const keywords = params.keyword.split(',').map((k) => k.trim()).filter(Boolean);
-      const locations = params.location.split(',').map((l) => l.trim()).filter(Boolean);
-
-      const pairs: [string, string][] = [];
-      for (const kw of keywords) {
-        for (const loc of locations) {
-          pairs.push([kw, loc]);
-        }
-      }
-
-      if (pairs.length === 0) {
-        setStatus('success');
+    try {
+      // Launch concurrent workers
+      const workers = Array.from({ length: Math.min(CONCURRENCY, pairs.length) }, () => worker());
+      await Promise.all(workers);
+    } catch (err) {
+      if (!abortRef.current) {
+        setError(err instanceof Error ? err.message : 'Search failed');
+        setStatus('error');
         return;
       }
+    }
 
-      setProgress({ completed: 0, total: pairs.length, percent: 0, etaSeconds: null });
+    // Final flush
+    if (updateTimer) clearTimeout(updateTimer);
 
-      try {
-        const res = await fetch(`${WORKER_URL}/search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pairs,
-            params: {
-              country: params.country,
-              language: params.language,
-              limit: params.limit,
-            },
-          }),
-        });
-
-        if (!res.ok) throw new Error('Failed to start search job');
-
-        const { jobId } = await res.json();
-        const sinceRef = { current: 0 };
-        const startTime = Date.now();
-
-        // Poll for results every 3s
-        pollRef.current = setInterval(
-          () => poll(jobId, sinceRef, startTime),
-          POLL_INTERVAL,
-        );
-        poll(jobId, sinceRef, startTime); // immediate first poll
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to connect to search worker');
-        setStatus('error');
+    if (!abortRef.current) {
+      if (paramsRef.current) {
+        setResults(applyFilters(allResultsRef.current, paramsRef.current));
       }
-    },
-    [poll, stopPolling],
-  );
+      setProgress({ completed: total, total, percent: 100, etaSeconds: 0 });
+      setStatus('success');
+    }
+  }, []);
 
   return { results, status, error, progress, search, cancel };
 }

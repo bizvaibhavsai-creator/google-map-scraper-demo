@@ -1,5 +1,7 @@
 .env.local
 node_modules/
 .next/
+out/
 .claude/
 tsconfig.tsbuildinfo
+worker/.wrangler/
