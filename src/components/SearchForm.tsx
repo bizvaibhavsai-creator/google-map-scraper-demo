@@ -19,11 +19,12 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   const [filterPermanentlyClosed, setFilterPermanentlyClosed] = useState<'any' | 'true' | 'false'>('any');
   const [filterTemporarilyClosed, setFilterTemporarilyClosed] = useState<'any' | 'true' | 'false'>('any');
   const [category, setCategory] = useState('');
+  const [dedupeWebsite, setDedupeWebsite] = useState(false);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!keyword.trim() || !location.trim()) return;
-    onSearch({ keyword: keyword.trim(), location: location.trim(), country, language, limit, minReviews, filterPermanentlyClosed, filterTemporarilyClosed, category: category.trim() });
+    onSearch({ keyword: keyword.trim(), location: location.trim(), country, language, limit, minReviews, filterPermanentlyClosed, filterTemporarilyClosed, category: category.trim(), dedupeWebsite });
   }
 
   return (
@@ -131,6 +132,17 @@ export function SearchForm({ onSearch, isLoading }: Props) {
             onChange={(e) => setCategory(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-600">Dedupe Results <span className="text-gray-400 font-normal">(on website)</span></label>
+          <select
+            value={dedupeWebsite ? 'yes' : 'no'}
+            onChange={(e) => setDedupeWebsite(e.target.value === 'yes')}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
         </div>
       </div>
       <button

@@ -8,6 +8,7 @@ export interface SearchParams {
   filterPermanentlyClosed: 'any' | 'true' | 'false';
   filterTemporarilyClosed: 'any' | 'true' | 'false';
   category: string;
+  dedupeWebsite: boolean;
 }
 
 export interface WorkingHours {

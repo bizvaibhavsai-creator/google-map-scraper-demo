@@ -31,6 +31,25 @@ interface BatchSearchResponse {
   results: MapResult[];
 }
 
+function normalizeWebsite(website: string | null | undefined): string | null {
+  if (!website) return null;
+
+  const trimmed = website.trim();
+  if (!trimmed) return null;
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProtocol);
+    return url.hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .split('/')[0]
+      .toLowerCase() || null;
+  }
+}
+
 function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   let filtered = raw;
 
@@ -180,6 +199,7 @@ export function useMapsSearch() {
     let completedPairs = 0;
     const startTime = Date.now();
     const seen = new Set<string>();
+    const seenWebsites = new Set<string>();
 
     // Throttled state flush — runs at most once per STATE_FLUSH_INTERVAL
     // First completion always flushes immediately so ETA appears right away
@@ -242,14 +262,26 @@ export function useMapsSearch() {
         // Merge results — deduplicate by business_id
         for (const entry of batchResults) {
           for (const r of entry.results) {
-            if (r.business_id && !seen.has(r.business_id)) {
+            const normalizedWebsite = normalizeWebsite(r.website);
+            const isDuplicateBusinessId = Boolean(r.business_id) && seen.has(r.business_id);
+            const isDuplicateWebsite = Boolean(
+              params.dedupeWebsite && normalizedWebsite && seenWebsites.has(normalizedWebsite),
+            );
+
+            if (isDuplicateBusinessId || isDuplicateWebsite) continue;
+
+            if (r.business_id) {
               seen.add(r.business_id);
-              allResultsRef.current.push({
-                ...r,
-                _location: entry.location,
-                _keyword: entry.keyword,
-              });
             }
+            if (params.dedupeWebsite && normalizedWebsite) {
+              seenWebsites.add(normalizedWebsite);
+            }
+
+            allResultsRef.current.push({
+              ...r,
+              _location: entry.location,
+              _keyword: entry.keyword,
+            });
           }
         }
 
