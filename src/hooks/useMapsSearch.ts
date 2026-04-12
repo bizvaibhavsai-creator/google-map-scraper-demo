@@ -12,7 +12,6 @@ export interface SearchProgress {
   etaSeconds: number | null;
 }
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
 const MAX_RESULTS_PER_SEARCH = 50;
 
 // ──────────────────── Tuning knobs ────────────────────
@@ -85,15 +84,16 @@ async function fetchPairSingle(
   location: string,
   params: { country: string; language: string; limit: number },
 ): Promise<MapResult[]> {
-  const url = new URL(`${WORKER_URL}/api/search`);
-  url.searchParams.set('keyword', keyword);
-  url.searchParams.set('location', location);
-  url.searchParams.set('limit', String(params.limit));
-  url.searchParams.set('country', params.country);
-  url.searchParams.set('lang', params.language);
+  const query = new URLSearchParams({
+    keyword,
+    location,
+    limit: String(params.limit),
+    country: params.country,
+    lang: params.language,
+  });
 
   try {
-    const res = await fetch(url.toString());
+    const res = await fetch(`/api/search?${query.toString()}`);
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : [];
@@ -109,7 +109,7 @@ async function fetchBatch(
   signal?: AbortSignal,
 ): Promise<BatchSearchResponse[]> {
   try {
-    const res = await fetch(`${WORKER_URL}/api/search/batch`, {
+    const res = await fetch('/api/search/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
