@@ -56,15 +56,11 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="panel rounded-[28px] p-6 sm:p-7 lg:p-8"
+      className="panel rounded-2xl p-6 sm:p-7 lg:p-8"
       style={{ animation: 'panelRise 0.45s ease-out both' }}
     >
       <div className="flex flex-col gap-2 border-b border-slate-200/80 pb-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Search Configuration</p>
-        <h2 className="text-xl font-semibold tracking-[-0.03em] text-slate-900">Build and run a targeted maps scrape</h2>
-        <p className="max-w-2xl text-sm leading-6 text-slate-600">
-          Configure keywords, geography, quality filters, and result limits before dispatching the search.
-        </p>
+        <h2 className="text-lg font-semibold tracking-[-0.03em] text-slate-900">Search Configuration</h2>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -193,9 +189,7 @@ export function SearchForm({ onSearch, isLoading }: Props) {
       </div>
 
       <div className="mt-7 flex flex-col gap-4 border-t border-slate-200/80 pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-xl text-sm leading-6 text-slate-500">
-          Searches run across every keyword and location pair, then flow into the live results grid below.
-        </p>
+        <p className="max-w-xl text-sm leading-6 text-slate-500">Searches run across every keyword and location pair.</p>
         <button
           type="submit"
           disabled={isLoading}

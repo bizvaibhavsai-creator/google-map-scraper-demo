@@ -37,7 +37,7 @@ export function ResultRow({ result, contactsState }: Props) {
       <td className="px-4 py-4 align-top text-sm font-medium text-slate-900">{result.name}</td>
       <td className="px-4 py-4 align-top text-sm text-slate-600">{category}</td>
       <td className="px-4 py-4 align-top">
-        <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${
+        <span className={`inline-block rounded-md px-2.5 py-1 text-[11px] font-medium ${
           result.is_permanently_closed
             ? 'bg-red-100 text-red-700'
             : result.is_temporarily_closed
@@ -48,10 +48,10 @@ export function ResultRow({ result, contactsState }: Props) {
         </span>
       </td>
       <td className="px-4 py-4 align-top">
-        <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">{result._keyword}</span>
+        <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">{result._keyword}</span>
       </td>
       <td className="px-4 py-4 align-top">
-        <span className="inline-block rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-700">{result._location}</span>
+        <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">{result._location}</span>
       </td>
       <td className="px-4 py-4 align-top text-sm text-slate-600">{result.full_address || '—'}</td>
       <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">
@@ -61,7 +61,7 @@ export function ResultRow({ result, contactsState }: Props) {
       </td>
       <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">
         {result.rating != null ? (
-          <span className="flex items-center gap-1"><span className="text-amber-500">★</span> {rating}</span>
+          <span className="flex items-center gap-1"><span className="text-slate-500">★</span> {rating}</span>
         ) : '—'}
       </td>
       <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">{reviews}</td>

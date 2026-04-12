@@ -144,13 +144,13 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
   };
 
   return (
-    <div className="panel rounded-[28px] overflow-hidden" style={{ animation: 'panelRise 0.5s ease-out both' }}>
+    <div className="panel rounded-2xl overflow-hidden" style={{ animation: 'panelRise 0.5s ease-out both' }}>
       <div className="flex flex-col gap-4 border-b border-slate-200/80 px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Results Workspace</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg font-semibold tracking-[-0.03em] text-slate-900">{filtered.length} records</span>
-            <span className="rounded-full border border-slate-200/80 bg-white/85 px-2.5 py-1 text-xs text-slate-500">
+            <span className="rounded-md border border-slate-200/80 bg-white px-2.5 py-1 text-xs text-slate-500">
               {results.length} total collected
             </span>
           </div>
@@ -176,7 +176,7 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
 
       {clayModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div className="panel-strong w-full max-w-md rounded-[24px] p-6 shadow-xl">
+          <div className="panel-strong w-full max-w-md rounded-xl p-6 shadow-xl">
             <div className="space-y-2">
               <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">Outbound Delivery</p>
               <h3 className="text-lg font-semibold tracking-[-0.03em] text-slate-900">Push to Clay</h3>
