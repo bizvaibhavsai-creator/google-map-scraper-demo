@@ -16,66 +16,65 @@ export function ResultRow({ result, contactsState }: Props) {
       ? 'Temporarily Closed'
       : 'Open';
 
-  // Email display — only rendered when contactsState is provided
   let emailDisplay: React.ReactNode = '—';
   if (contactsState) {
     if (!result.website) {
-      emailDisplay = <span className="text-gray-400 text-xs">No website</span>;
+      emailDisplay = <span className="text-xs text-slate-400">No website</span>;
     } else if (contactsState.status === 'idle' || contactsState.status === 'loading') {
       emailDisplay = <LoadingSpinner size="sm" />;
     } else if (contactsState.status === 'success') {
       const emails = contactsState.data.emails;
       emailDisplay = emails.length > 0
-        ? <span className="text-sm text-gray-700 break-all">{emails.join(', ')}</span>
-        : <span className="text-gray-400 text-xs">None found</span>;
+        ? <span className="break-all text-sm text-slate-700">{emails.join(', ')}</span>
+        : <span className="text-xs text-slate-400">None found</span>;
     } else if (contactsState.status === 'error') {
-      emailDisplay = <span className="text-red-400 text-xs">Error</span>;
+      emailDisplay = <span className="text-xs text-red-500">Error</span>;
     }
   }
 
   return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-      <td className="px-4 py-3 text-sm font-medium text-gray-900 align-top">{result.name}</td>
-      <td className="px-4 py-3 text-sm text-gray-600 align-top">{category}</td>
-      <td className="px-4 py-3 align-top">
-        <span className={`inline-block text-xs rounded px-2 py-0.5 ${
+    <tr className="border-b border-slate-200/60 transition-colors hover:bg-white/70">
+      <td className="px-4 py-4 align-top text-sm font-medium text-slate-900">{result.name}</td>
+      <td className="px-4 py-4 align-top text-sm text-slate-600">{category}</td>
+      <td className="px-4 py-4 align-top">
+        <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium ${
           result.is_permanently_closed
             ? 'bg-red-100 text-red-700'
             : result.is_temporarily_closed
-              ? 'bg-yellow-100 text-yellow-700'
-              : 'bg-green-100 text-green-700'
+              ? 'bg-amber-100 text-amber-700'
+              : 'bg-teal-100 text-teal-700'
         }`}>
           {closedStatus}
         </span>
       </td>
-      <td className="px-4 py-3 align-top">
-        <span className="inline-block text-xs bg-blue-50 text-blue-700 rounded px-2 py-0.5">{result._keyword}</span>
+      <td className="px-4 py-4 align-top">
+        <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">{result._keyword}</span>
       </td>
-      <td className="px-4 py-3 align-top">
-        <span className="inline-block text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5">{result._location}</span>
+      <td className="px-4 py-4 align-top">
+        <span className="inline-block rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-700">{result._location}</span>
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 align-top">{result.full_address || '—'}</td>
-      <td className="px-4 py-3 text-sm text-gray-600 align-top whitespace-nowrap">
+      <td className="px-4 py-4 align-top text-sm text-slate-600">{result.full_address || '—'}</td>
+      <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">
         {result.phone_number ? (
-          <a href={`tel:${result.phone_number}`} className="text-blue-600 hover:underline">{result.phone_number}</a>
+          <a href={`tel:${result.phone_number}`} className="text-slate-900 underline-offset-2 hover:underline">{result.phone_number}</a>
         ) : '—'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 align-top whitespace-nowrap">
+      <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">
         {result.rating != null ? (
-          <span className="flex items-center gap-1"><span className="text-yellow-500">★</span> {rating}</span>
+          <span className="flex items-center gap-1"><span className="text-amber-500">★</span> {rating}</span>
         ) : '—'}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600 align-top whitespace-nowrap">{reviews}</td>
-      <td className="px-4 py-3 text-sm align-top">
+      <td className="px-4 py-4 align-top whitespace-nowrap text-sm text-slate-600">{reviews}</td>
+      <td className="px-4 py-4 align-top text-sm">
         {result.website ? (
-          <a href={result.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs break-all">
+          <a href={result.website} target="_blank" rel="noopener noreferrer" className="break-all text-xs text-slate-900 underline-offset-2 hover:underline">
             {result.website.replace(/^https?:\/\//, '')}
           </a>
         ) : (
-          <span className="text-gray-400 text-xs italic">No website</span>
+          <span className="text-xs italic text-slate-400">No website</span>
         )}
       </td>
-      {contactsState && <td className="px-4 py-3 align-top">{emailDisplay}</td>}
+      {contactsState && <td className="px-4 py-4 align-top">{emailDisplay}</td>}
     </tr>
   );
 }

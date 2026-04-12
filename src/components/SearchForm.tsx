@@ -27,6 +27,7 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!keyword.trim() || !location.trim()) return;
+
     const normalizedLimit = Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number.isFinite(limit) ? limit : 20));
     const parsedMinReviews = minReviews === '' ? 0 : Number(minReviews);
     const parsedMaxReviews = maxReviews === '' ? 0 : Number(maxReviews);
@@ -55,141 +56,155 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4"
+      className="panel rounded-[28px] p-6 sm:p-7 lg:p-8"
+      style={{ animation: 'panelRise 0.45s ease-out both' }}
     >
-      <h2 className="text-lg font-semibold text-gray-800">Search Google Maps</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Keywords <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+      <div className="flex flex-col gap-2 border-b border-slate-200/80 pb-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Search Configuration</p>
+        <h2 className="text-xl font-semibold tracking-[-0.03em] text-slate-900">Build and run a targeted maps scrape</h2>
+        <p className="max-w-2xl text-sm leading-6 text-slate-600">
+          Configure keywords, geography, quality filters, and result limits before dispatching the search.
+        </p>
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Keywords <span className="font-normal text-slate-400">(comma-separated)</span></label>
           <input
             type="text"
             placeholder="e.g. restaurant, dentist"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             required
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Locations <span className="text-gray-400 font-normal">(comma-separated)</span></label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Locations <span className="font-normal text-slate-400">(comma-separated)</span></label>
           <input
             type="text"
             placeholder="e.g. New York, London, Paris"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             required
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Country code</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Country code</label>
           <input
             type="text"
             placeholder="us"
             maxLength={2}
             value={country}
             onChange={(e) => setCountry(e.target.value.toLowerCase())}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Language code</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Language code</label>
           <input
             type="text"
             placeholder="en"
             maxLength={2}
             value={language}
             onChange={(e) => setLanguage(e.target.value.toLowerCase())}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Result limit <span className="text-gray-400 font-normal">(max 50)</span></label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Result limit <span className="font-normal text-slate-400">(max 50)</span></label>
           <input
             type="number"
             min={1}
             max={MAX_RESULTS_PER_SEARCH}
             value={limit}
             onChange={(e) => setLimit(Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number(e.target.value))))}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Min. reviews</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Min. reviews</label>
           <input
             type="number"
             min={0}
             placeholder="Any"
             value={minReviews}
             onChange={(e) => setMinReviews(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Max. reviews</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Max. reviews</label>
           <input
             type="number"
             min={0}
             placeholder="Any"
             value={maxReviews}
             onChange={(e) => setMaxReviews(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Permanently closed</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Permanently closed</label>
           <select
             value={filterPermanentlyClosed}
             onChange={(e) => setFilterPermanentlyClosed(e.target.value as 'any' | 'true' | 'false')}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           >
             <option value="any">Any</option>
             <option value="true">True</option>
             <option value="false">False</option>
           </select>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Temporarily closed</label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Temporarily closed</label>
           <select
             value={filterTemporarilyClosed}
             onChange={(e) => setFilterTemporarilyClosed(e.target.value as 'any' | 'true' | 'false')}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           >
             <option value="any">Any</option>
             <option value="true">True</option>
             <option value="false">False</option>
           </select>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Category <span className="text-gray-400 font-normal">(optional)</span></label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Category <span className="font-normal text-slate-400">(optional)</span></label>
           <input
             type="text"
             placeholder="e.g. general contractor"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           />
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Dedupe Results <span className="text-gray-400 font-normal">(on website)</span></label>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Dedupe Results <span className="font-normal text-slate-400">(on website)</span></label>
           <select
             value={dedupeWebsite ? 'yes' : 'no'}
             onChange={(e) => setDedupeWebsite(e.target.value === 'yes')}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field-shell"
           >
             <option value="no">No</option>
             <option value="yes">Yes</option>
           </select>
         </div>
       </div>
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium px-5 py-2 rounded-lg text-sm transition-colors"
-      >
-        {isLoading && <LoadingSpinner />}
-        {isLoading ? 'Searching…' : 'Search'}
-      </button>
+
+      <div className="mt-7 flex flex-col gap-4 border-t border-slate-200/80 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-xl text-sm leading-6 text-slate-500">
+          Searches run across every keyword and location pair, then flow into the live results grid below.
+        </p>
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="btn-primary min-w-[148px]"
+        >
+          {isLoading && <LoadingSpinner />}
+          {isLoading ? 'Searching…' : 'Run Search'}
+        </button>
+      </div>
     </form>
   );
 }

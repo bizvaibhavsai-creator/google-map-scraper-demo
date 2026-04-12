@@ -7,7 +7,6 @@ import { ResultRow } from './ResultRow';
 
 type EmailFilter = 'all' | 'has_emails' | 'blank';
 
-// Set to true to show email column and enable enrichment filtering
 const ENABLE_EMAILS = false;
 
 interface Props {
@@ -23,7 +22,7 @@ const IDLE: ContactsState = { status: 'idle' };
 
 function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
   return (
-    <span className={`ml-1 text-xs ${active ? 'text-blue-600' : 'text-gray-400'}`}>
+    <span className={`ml-1 text-xs ${active ? 'text-slate-900' : 'text-slate-400'}`}>
       {!active ? '↕' : dir === 'asc' ? '↑' : '↓'}
     </span>
   );
@@ -35,7 +34,7 @@ function SortableHeader({
   const active = sortConfig.key === sortKey;
   return (
     <th
-      className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-blue-600"
+      className="cursor-pointer select-none whitespace-nowrap px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 transition-colors hover:text-slate-900"
       onClick={() => onSort(sortKey)}
     >
       {label}
@@ -116,7 +115,6 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
   const [clayProgress, setClayProgress] = useState<{ sent: number; total: number } | null>(null);
   const [clayDone, setClayDone] = useState(false);
 
-  // Email filtering — only applies when ENABLE_EMAILS is true
   const filtered = (ENABLE_EMAILS && emailFilter !== 'all' && contactsMap)
     ? results.filter((r) => {
         const cs = contactsMap[r.business_id];
@@ -146,20 +144,28 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">{filtered.length} of {results.length} results</span>
-        <div className="flex items-center gap-2">
+    <div className="panel rounded-[28px] overflow-hidden" style={{ animation: 'panelRise 0.5s ease-out both' }}>
+      <div className="flex flex-col gap-4 border-b border-slate-200/80 px-6 py-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">Results Workspace</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-semibold tracking-[-0.03em] text-slate-900">{filtered.length} records</span>
+            <span className="rounded-full border border-slate-200/80 bg-white/85 px-2.5 py-1 text-xs text-slate-500">
+              {results.length} total collected
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => exportToCsv(results, contactsMap)}
-            className="flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+            className="btn-secondary"
           >
             Export CSV
           </button>
           <button
             onClick={() => setClayModal(true)}
             disabled={clayProgress !== null && !clayDone}
-            className="flex items-center gap-1.5 text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-1.5 rounded-lg transition-colors"
+            className="btn-primary px-4 py-2.5"
           >
             {clayProgress && !clayDone
               ? `Pushing to Clay… ${clayProgress.sent}/${clayProgress.total}`
@@ -169,17 +175,23 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
       </div>
 
       {clayModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 shadow-xl w-full max-w-md space-y-4">
-            <h3 className="text-lg font-semibold text-gray-800">Push to Clay</h3>
-            <p className="text-sm text-gray-500">Enter your Clay webhook URL. Rows will be sent one per second.</p>
-            <input type="url" placeholder="https://api.clay.com/v1/webhooks/..." value={clayWebhook}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+          <div className="panel-strong w-full max-w-md rounded-[24px] p-6 shadow-xl">
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">Outbound Delivery</p>
+              <h3 className="text-lg font-semibold tracking-[-0.03em] text-slate-900">Push to Clay</h3>
+              <p className="text-sm leading-6 text-slate-600">Enter your Clay webhook URL. Rows will be sent one per second.</p>
+            </div>
+            <input
+              type="url"
+              placeholder="https://api.clay.com/v1/webhooks/..."
+              value={clayWebhook}
               onChange={(e) => setClayWebhook(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setClayModal(false)} className="text-sm text-gray-600 hover:text-gray-800 px-4 py-2 rounded-lg">Cancel</button>
-              <button onClick={handleClayStart} disabled={!clayWebhook.trim()}
-                className="text-sm bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-medium px-4 py-2 rounded-lg transition-colors">
+              className="field-shell mt-5 w-full"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button onClick={() => setClayModal(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleClayStart} disabled={!clayWebhook.trim()} className="btn-primary px-4 py-2.5">
                 Start Push ({results.length} rows)
               </button>
             </div>
@@ -199,7 +211,7 @@ export function ResultsTable({ results, sortConfig, onSort, contactsMap, emailFi
   );
 }
 
-const ROW_HEIGHT = 52;
+const ROW_HEIGHT = 60;
 const OVERSCAN = 10;
 
 function VirtualTable({
@@ -222,42 +234,42 @@ function VirtualTable({
   });
 
   return (
-    <div ref={scrollRef} className="overflow-x-auto overflow-y-auto max-h-[65vh]">
-      <table className="w-full table-fixed min-w-[1200px]">
+    <div ref={scrollRef} className="max-h-[65vh] overflow-x-auto overflow-y-auto px-2 pb-2">
+      <table className="min-w-[1200px] w-full table-fixed">
         <colgroup>
+          <col className="w-[160px]" />
           <col className="w-[140px]" />
           <col className="w-[120px]" />
           <col className="w-[110px]" />
-          <col className="w-[100px]" />
-          <col className="w-[100px]" />
-          <col className="w-[160px]" />
-          <col className="w-[110px]" />
-          <col className="w-[65px]" />
-          <col className="w-[65px]" />
-          <col className="w-[140px]" />
+          <col className="w-[120px]" />
+          <col className="w-[190px]" />
+          <col className="w-[120px]" />
+          <col className="w-[80px]" />
+          <col className="w-[90px]" />
+          <col className="w-[170px]" />
           {ENABLE_EMAILS && <col className="w-[200px]" />}
         </colgroup>
-        <thead className="sticky top-0 bg-gray-50 z-10 border-b border-gray-200">
+        <thead className="sticky top-0 z-10 border-b border-slate-200/80 bg-[rgba(245,246,241,0.94)] backdrop-blur">
           <tr>
             <SortableHeader label="Name" sortKey="name" sortConfig={sortConfig} onSort={onSort} />
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Category</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Keyword</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Location</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Phone</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Category</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Status</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Keyword</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Location</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Address</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Phone</th>
             <SortableHeader label="Rating" sortKey="rating" sortConfig={sortConfig} onSort={onSort} />
             <SortableHeader label="Reviews" sortKey="review_count" sortConfig={sortConfig} onSort={onSort} />
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Website</th>
+            <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Website</th>
             {ENABLE_EMAILS && (
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              <th className="px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 <div className="flex items-center gap-2">
                   Emails
                   {onEmailFilterChange && (
                     <select
                       value={emailFilter}
                       onChange={(e) => onEmailFilterChange(e.target.value as EmailFilter)}
-                      className="text-xs font-normal normal-case tracking-normal border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="field-shell px-2 py-1 text-xs font-normal normal-case tracking-normal"
                     >
                       <option value="all">All</option>
                       <option value="has_emails">Has Emails</option>
@@ -270,7 +282,6 @@ function VirtualTable({
           </tr>
         </thead>
         <tbody>
-          {/* Top spacer */}
           {virtualizer.getVirtualItems().length > 0 && (
             <tr><td style={{ height: virtualizer.getVirtualItems()[0].start, padding: 0 }} /></tr>
           )}
@@ -284,13 +295,14 @@ function VirtualTable({
               />
             );
           })}
-          {/* Bottom spacer */}
           {virtualizer.getVirtualItems().length > 0 && (
             <tr>
-              <td style={{
-                height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
-                padding: 0,
-              }} />
+              <td
+                style={{
+                  height: virtualizer.getTotalSize() - (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
+                  padding: 0,
+                }}
+              />
             </tr>
           )}
         </tbody>
