@@ -13,7 +13,23 @@ export interface SearchProgress {
 }
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
-const CONCURRENCY = 10;
+
+// ──────────────────── Tuning knobs ────────────────────
+// How many keyword+location pairs to send in each batch POST
+const BATCH_SIZE = 50;
+// How many batch requests to run in parallel from the browser
+// 5 batches × 50 pairs × 10 server-side concurrency = 500 effective parallel API calls
+const CONCURRENT_BATCHES = 5;
+// How often (ms) we flush accumulated results into React state
+// Longer = fewer re-renders = smoother UI at scale
+const STATE_FLUSH_INTERVAL = 1_000;
+// ──────────────────────────────────────────────────────
+
+interface BatchSearchResponse {
+  keyword: string;
+  location: string;
+  results: MapResult[];
+}
 
 function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   let filtered = raw;
@@ -40,7 +56,8 @@ function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   return filtered.slice(0, params.limit);
 }
 
-async function fetchPair(
+// ──────── Legacy single-request fetch (kept for fallback) ────────
+async function fetchPairSingle(
   keyword: string,
   location: string,
   params: { country: string; language: string; limit: number },
@@ -62,22 +79,74 @@ async function fetchPair(
   }
 }
 
+// ──────── Batch fetch — sends up to BATCH_SIZE pairs per POST ────────
+async function fetchBatch(
+  pairs: { keyword: string; location: string }[],
+  params: { country: string; language: string; limit: number },
+  signal?: AbortSignal,
+): Promise<BatchSearchResponse[]> {
+  try {
+    const res = await fetch(`${WORKER_URL}/api/search/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pairs,
+        limit: String(params.limit),
+        country: params.country,
+        lang: params.language,
+      }),
+      signal,
+    });
+    if (!res.ok) {
+      // Fallback: if batch endpoint doesn't exist, fetch individually
+      if (res.status === 404) {
+        const results: BatchSearchResponse[] = [];
+        for (const p of pairs) {
+          const r = await fetchPairSingle(p.keyword, p.location, params);
+          results.push({ keyword: p.keyword, location: p.location, results: r });
+        }
+        return results;
+      }
+      return pairs.map((p) => ({ keyword: p.keyword, location: p.location, results: [] }));
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return pairs.map((p) => ({ keyword: p.keyword, location: p.location, results: [] }));
+  }
+}
+
+// ──────── Yield to main thread to prevent freezing ────────
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => resolve(), { timeout: 50 });
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
 export function useMapsSearch() {
   const [results, setResults] = useState<MapResult[]>([]);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<SearchProgress | null>(null);
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const allResultsRef = useRef<MapResult[]>([]);
   const paramsRef = useRef<SearchParams | null>(null);
 
   const cancel = useCallback(() => {
     abortRef.current = true;
+    abortControllerRef.current?.abort();
     setStatus('idle');
   }, []);
 
   const search = useCallback(async (params: SearchParams) => {
     abortRef.current = false;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setStatus('loading');
     setError(null);
     setResults([]);
@@ -88,10 +157,11 @@ export function useMapsSearch() {
     const keywords = params.keyword.split(',').map((k) => k.trim()).filter(Boolean);
     const locations = params.location.split(',').map((l) => l.trim()).filter(Boolean);
 
-    const pairs: [string, string][] = [];
+    // Build all keyword × location pairs
+    const pairs: { keyword: string; location: string }[] = [];
     for (const kw of keywords) {
       for (const loc of locations) {
-        pairs.push([kw, loc]);
+        pairs.push({ keyword: kw, location: loc });
       }
     }
 
@@ -100,73 +170,89 @@ export function useMapsSearch() {
       return;
     }
 
-    const total = pairs.length;
-    let completed = 0;
+    // ──── Split pairs into batches of BATCH_SIZE ────
+    const batches: { keyword: string; location: string }[][] = [];
+    for (let i = 0; i < pairs.length; i += BATCH_SIZE) {
+      batches.push(pairs.slice(i, i + BATCH_SIZE));
+    }
+
+    const totalPairs = pairs.length;
+    let completedPairs = 0;
     const startTime = Date.now();
     const seen = new Set<string>();
-    // Throttle React state updates to avoid excessive re-renders on large scrapes
-    let updateTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Throttled state flush — runs at most once per STATE_FLUSH_INTERVAL
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let dirty = false;
 
-    function scheduleUpdate() {
+    function scheduleFlush() {
       dirty = true;
-      if (updateTimer) return;
-      updateTimer = setTimeout(() => {
-        updateTimer = null;
-        if (!dirty) return;
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        if (!dirty || abortRef.current) return;
         dirty = false;
         if (paramsRef.current) {
           setResults(applyFilters(allResultsRef.current, paramsRef.current));
         }
         const elapsed = (Date.now() - startTime) / 1000;
-        const rate = completed / elapsed;
-        const remaining = total - completed;
+        const rate = completedPairs / elapsed;
+        const remaining = totalPairs - completedPairs;
         setProgress({
-          completed,
-          total,
-          percent: Math.round((completed / total) * 100),
+          completed: completedPairs,
+          total: totalPairs,
+          percent: Math.round((completedPairs / totalPairs) * 100),
           etaSeconds: rate > 0 ? Math.round(remaining / rate) : null,
         });
-      }, 500);
+      }, STATE_FLUSH_INTERVAL);
     }
 
-    setProgress({ completed: 0, total, percent: 0, etaSeconds: null });
+    setProgress({ completed: 0, total: totalPairs, percent: 0, etaSeconds: null });
 
-    // Process pairs with concurrency limit
-    let index = 0;
+    // ──── Process batches with CONCURRENT_BATCHES in parallel ────
+    let batchIndex = 0;
 
-    async function worker() {
-      while (index < pairs.length) {
+    async function batchWorker() {
+      while (batchIndex < batches.length) {
         if (abortRef.current) return;
-        const i = index++;
-        const [keyword, location] = pairs[i];
+        const bi = batchIndex++;
+        const batch = batches[bi];
 
-        const results = await fetchPair(keyword, location, {
+        const batchResults = await fetchBatch(batch, {
           country: params.country,
           language: params.language,
           limit: params.limit,
-        });
+        }, controller.signal);
 
-        // Deduplicate and tag with keyword/location
-        for (const r of results) {
-          if (r.business_id && !seen.has(r.business_id)) {
-            seen.add(r.business_id);
-            allResultsRef.current.push({
-              ...r,
-              _location: location,
-              _keyword: keyword,
-            });
+        if (abortRef.current) return;
+
+        // Merge results — deduplicate by business_id
+        for (const entry of batchResults) {
+          for (const r of entry.results) {
+            if (r.business_id && !seen.has(r.business_id)) {
+              seen.add(r.business_id);
+              allResultsRef.current.push({
+                ...r,
+                _location: entry.location,
+                _keyword: entry.keyword,
+              });
+            }
           }
         }
 
-        completed++;
-        scheduleUpdate();
+        completedPairs += batch.length;
+        scheduleFlush();
+
+        // Yield to main thread between batches so UI stays responsive
+        await yieldToMain();
       }
     }
 
     try {
-      // Launch concurrent workers
-      const workers = Array.from({ length: Math.min(CONCURRENCY, pairs.length) }, () => worker());
+      const workers = Array.from(
+        { length: Math.min(CONCURRENT_BATCHES, batches.length) },
+        () => batchWorker(),
+      );
       await Promise.all(workers);
     } catch (err) {
       if (!abortRef.current) {
@@ -177,13 +263,13 @@ export function useMapsSearch() {
     }
 
     // Final flush
-    if (updateTimer) clearTimeout(updateTimer);
+    if (flushTimer) clearTimeout(flushTimer);
 
     if (!abortRef.current) {
       if (paramsRef.current) {
         setResults(applyFilters(allResultsRef.current, paramsRef.current));
       }
-      setProgress({ completed: total, total, percent: 100, etaSeconds: 0 });
+      setProgress({ completed: totalPairs, total: totalPairs, percent: 100, etaSeconds: 0 });
       setStatus('success');
     }
   }, []);
