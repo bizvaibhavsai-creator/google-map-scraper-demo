@@ -22,7 +22,7 @@ const BATCH_SIZE = 50;
 const CONCURRENT_BATCHES = 5;
 // How often (ms) we flush accumulated results into React state
 // Longer = fewer re-renders = smoother UI at scale
-const STATE_FLUSH_INTERVAL = 1_000;
+const STATE_FLUSH_INTERVAL = 400;
 // ──────────────────────────────────────────────────────
 
 interface BatchSearchResponse {
@@ -182,28 +182,41 @@ export function useMapsSearch() {
     const seen = new Set<string>();
 
     // Throttled state flush — runs at most once per STATE_FLUSH_INTERVAL
+    // First completion always flushes immediately so ETA appears right away
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     let dirty = false;
+    let firstFlush = true;
+
+    function doFlush() {
+      dirty = false;
+      if (abortRef.current) return;
+      if (paramsRef.current) {
+        setResults(applyFilters(allResultsRef.current, paramsRef.current));
+      }
+      const elapsed = (Date.now() - startTime) / 1000;
+      const rate = completedPairs / Math.max(elapsed, 0.1);
+      const remaining = totalPairs - completedPairs;
+      setProgress({
+        completed: completedPairs,
+        total: totalPairs,
+        percent: Math.round((completedPairs / totalPairs) * 100),
+        etaSeconds: rate > 0 ? Math.round(remaining / rate) : null,
+      });
+    }
 
     function scheduleFlush() {
       dirty = true;
+      // First completion: flush immediately so ETA shows right away
+      if (firstFlush) {
+        firstFlush = false;
+        doFlush();
+        return;
+      }
       if (flushTimer) return;
       flushTimer = setTimeout(() => {
         flushTimer = null;
-        if (!dirty || abortRef.current) return;
-        dirty = false;
-        if (paramsRef.current) {
-          setResults(applyFilters(allResultsRef.current, paramsRef.current));
-        }
-        const elapsed = (Date.now() - startTime) / 1000;
-        const rate = completedPairs / elapsed;
-        const remaining = totalPairs - completedPairs;
-        setProgress({
-          completed: completedPairs,
-          total: totalPairs,
-          percent: Math.round((completedPairs / totalPairs) * 100),
-          etaSeconds: rate > 0 ? Math.round(remaining / rate) : null,
-        });
+        if (!dirty) return;
+        doFlush();
       }, STATE_FLUSH_INTERVAL);
     }
 
