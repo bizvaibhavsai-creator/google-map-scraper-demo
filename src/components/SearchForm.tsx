@@ -15,7 +15,8 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   const [country, setCountry] = useState('us');
   const [language, setLanguage] = useState('en');
   const [limit, setLimit] = useState(20);
-  const [minReviews, setMinReviews] = useState(0);
+  const [minReviews, setMinReviews] = useState('');
+  const [maxReviews, setMaxReviews] = useState('');
   const [filterPermanentlyClosed, setFilterPermanentlyClosed] = useState<'any' | 'true' | 'false'>('any');
   const [filterTemporarilyClosed, setFilterTemporarilyClosed] = useState<'any' | 'true' | 'false'>('any');
   const [category, setCategory] = useState('');
@@ -24,7 +25,28 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!keyword.trim() || !location.trim()) return;
-    onSearch({ keyword: keyword.trim(), location: location.trim(), country, language, limit, minReviews, filterPermanentlyClosed, filterTemporarilyClosed, category: category.trim(), dedupeWebsite });
+    const parsedMinReviews = minReviews === '' ? 0 : Number(minReviews);
+    const parsedMaxReviews = maxReviews === '' ? 0 : Number(maxReviews);
+    const normalizedMinReviews = Math.max(0, Number.isFinite(parsedMinReviews) ? parsedMinReviews : 0);
+    const normalizedMaxReviews = Math.max(0, Number.isFinite(parsedMaxReviews) ? parsedMaxReviews : 0);
+    const [finalMinReviews, finalMaxReviews] =
+      normalizedMaxReviews > 0 && normalizedMaxReviews < normalizedMinReviews
+        ? [normalizedMaxReviews, normalizedMinReviews]
+        : [normalizedMinReviews, normalizedMaxReviews];
+
+    onSearch({
+      keyword: keyword.trim(),
+      location: location.trim(),
+      country,
+      language,
+      limit,
+      minReviews: finalMinReviews,
+      maxReviews: finalMaxReviews,
+      filterPermanentlyClosed,
+      filterTemporarilyClosed,
+      category: category.trim(),
+      dedupeWebsite,
+    });
   }
 
   return (
@@ -93,9 +115,20 @@ export function SearchForm({ onSearch, isLoading }: Props) {
           <input
             type="number"
             min={0}
-            placeholder="0"
+            placeholder="Any"
             value={minReviews}
-            onChange={(e) => setMinReviews(Number(e.target.value))}
+            onChange={(e) => setMinReviews(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium text-gray-600">Max. reviews</label>
+          <input
+            type="number"
+            min={0}
+            placeholder="Any"
+            value={maxReviews}
+            onChange={(e) => setMaxReviews(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

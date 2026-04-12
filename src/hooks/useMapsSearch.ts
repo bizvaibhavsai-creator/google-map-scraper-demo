@@ -56,6 +56,9 @@ function applyFilters(raw: MapResult[], params: SearchParams): MapResult[] {
   if (params.minReviews > 0) {
     filtered = filtered.filter((r) => (r.review_count ?? 0) >= params.minReviews);
   }
+  if (params.maxReviews > 0) {
+    filtered = filtered.filter((r) => (r.review_count ?? 0) <= params.maxReviews);
+  }
   if (params.filterPermanentlyClosed !== 'any') {
     const want = params.filterPermanentlyClosed === 'true';
     filtered = filtered.filter((r) => Boolean(r.is_permanently_closed) === want);
