@@ -13,6 +13,7 @@ export interface SearchProgress {
 }
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
+const MAX_RESULTS_PER_SEARCH = 50;
 
 // ──────────────────── Tuning knobs ────────────────────
 // How many keyword+location pairs to send in each batch POST
@@ -166,6 +167,11 @@ export function useMapsSearch() {
   }, []);
 
   const search = useCallback(async (params: SearchParams) => {
+    const sanitizedParams: SearchParams = {
+      ...params,
+      limit: Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number.isFinite(params.limit) ? params.limit : 20)),
+    };
+
     abortRef.current = false;
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -174,10 +180,10 @@ export function useMapsSearch() {
     setResults([]);
     setProgress(null);
     allResultsRef.current = [];
-    paramsRef.current = params;
+    paramsRef.current = sanitizedParams;
 
-    const keywords = params.keyword.split(',').map((k) => k.trim()).filter(Boolean);
-    const locations = params.location.split(',').map((l) => l.trim()).filter(Boolean);
+    const keywords = sanitizedParams.keyword.split(',').map((k) => k.trim()).filter(Boolean);
+    const locations = sanitizedParams.location.split(',').map((l) => l.trim()).filter(Boolean);
 
     // Build all keyword × location pairs
     const pairs: { keyword: string; location: string }[] = [];
@@ -255,9 +261,9 @@ export function useMapsSearch() {
         const batch = batches[bi];
 
         const batchResults = await fetchBatch(batch, {
-          country: params.country,
-          language: params.language,
-          limit: params.limit,
+          country: sanitizedParams.country,
+          language: sanitizedParams.language,
+          limit: sanitizedParams.limit,
         }, controller.signal);
 
         if (abortRef.current) return;

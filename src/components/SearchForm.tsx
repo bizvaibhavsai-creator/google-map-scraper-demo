@@ -9,6 +9,8 @@ interface Props {
   isLoading: boolean;
 }
 
+const MAX_RESULTS_PER_SEARCH = 50;
+
 export function SearchForm({ onSearch, isLoading }: Props) {
   const [keyword, setKeyword] = useState('');
   const [location, setLocation] = useState('');
@@ -25,6 +27,7 @@ export function SearchForm({ onSearch, isLoading }: Props) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!keyword.trim() || !location.trim()) return;
+    const normalizedLimit = Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number.isFinite(limit) ? limit : 20));
     const parsedMinReviews = minReviews === '' ? 0 : Number(minReviews);
     const parsedMaxReviews = maxReviews === '' ? 0 : Number(maxReviews);
     const normalizedMinReviews = Math.max(0, Number.isFinite(parsedMinReviews) ? parsedMinReviews : 0);
@@ -39,7 +42,7 @@ export function SearchForm({ onSearch, isLoading }: Props) {
       location: location.trim(),
       country,
       language,
-      limit,
+      limit: normalizedLimit,
       minReviews: finalMinReviews,
       maxReviews: finalMaxReviews,
       filterPermanentlyClosed,
@@ -101,12 +104,13 @@ export function SearchForm({ onSearch, isLoading }: Props) {
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-600">Result limit</label>
+          <label className="text-sm font-medium text-gray-600">Result limit <span className="text-gray-400 font-normal">(max 50)</span></label>
           <input
             type="number"
             min={1}
+            max={MAX_RESULTS_PER_SEARCH}
             value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
+            onChange={(e) => setLimit(Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number(e.target.value))))}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

@@ -2,6 +2,8 @@ interface Env {
   SCRAPER_API_KEY: string;
 }
 
+const MAX_RESULTS_PER_SEARCH = 50;
+
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -13,6 +15,12 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
+}
+
+function clampLimit(rawLimit: string | null | undefined): string {
+  const parsed = Number(rawLimit ?? 20);
+  const safe = Number.isFinite(parsed) ? parsed : 20;
+  return String(Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Math.trunc(safe))));
 }
 
 // --------------- Concurrency limiter ---------------
@@ -169,7 +177,7 @@ async function fetchEmailsForWebsite(
 async function handleSearch(url: URL, env: Env): Promise<Response> {
   const keyword = url.searchParams.get('keyword');
   const location = url.searchParams.get('location');
-  const limit = url.searchParams.get('limit') || '20';
+  const limit = clampLimit(url.searchParams.get('limit'));
   const country = url.searchParams.get('country') || 'us';
   const lang = url.searchParams.get('lang') || 'en';
 
@@ -206,7 +214,7 @@ async function handleSearchBatch(request: Request, env: Env): Promise<Response> 
 
   // Cap batch size to 50 to stay within worker CPU limits
   const capped = pairs.slice(0, 50);
-  const limit = body.limit || '20';
+  const limit = clampLimit(body.limit);
   const country = body.country || 'us';
   const lang = body.lang || 'en';
 
