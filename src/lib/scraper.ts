@@ -1,4 +1,3 @@
-const MAX_RESULTS_PER_SEARCH = 50;
 const BATCH_SEARCH_CONCURRENCY = 10;
 
 function getScraperApiKey(): string {
@@ -12,7 +11,7 @@ function getScraperApiKey(): string {
 export function clampLimit(rawLimit: string | null | undefined): string {
   const parsed = Number(rawLimit ?? 20);
   const safe = Number.isFinite(parsed) ? parsed : 20;
-  return String(Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Math.trunc(safe))));
+  return String(Math.max(1, Math.trunc(safe)));
 }
 
 export async function runWithConcurrency<T>(
@@ -106,13 +105,12 @@ export async function fetchSearchBatch(
   country: string,
   lang: string,
 ) {
-  const cappedPairs = pairs.slice(0, 50);
-  const tasks = cappedPairs.map(
+  const tasks = pairs.map(
     (pair) => () => fetchSearchPair(pair.keyword, pair.location, limit, country, lang),
   );
   const allResults = await runWithConcurrency(tasks, BATCH_SEARCH_CONCURRENCY);
 
-  return cappedPairs.map((pair, index) => ({
+  return pairs.map((pair, index) => ({
     keyword: pair.keyword,
     location: pair.location,
     results: allResults[index],

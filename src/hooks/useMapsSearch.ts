@@ -12,8 +12,6 @@ export interface SearchProgress {
   etaSeconds: number | null;
 }
 
-const MAX_RESULTS_PER_SEARCH = 50;
-
 // ──────────────────── Tuning knobs ────────────────────
 // How many keyword+location pairs to send in each batch POST
 const BATCH_SIZE = 50;
@@ -169,7 +167,7 @@ export function useMapsSearch() {
   const search = useCallback(async (params: SearchParams) => {
     const sanitizedParams: SearchParams = {
       ...params,
-      limit: Math.min(MAX_RESULTS_PER_SEARCH, Math.max(1, Number.isFinite(params.limit) ? params.limit : 20)),
+      limit: Math.max(1, Number.isFinite(params.limit) ? params.limit : 20),
     };
 
     abortRef.current = false;
