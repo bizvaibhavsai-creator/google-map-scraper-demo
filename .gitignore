@@ -7,5 +7,3 @@ tsconfig.tsbuildinfo
 worker/.wrangler/
 .vercel/
 .wrangler/
-.open-next/
-cloudflare-env.d.ts
