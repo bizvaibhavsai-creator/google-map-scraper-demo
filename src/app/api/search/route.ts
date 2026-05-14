@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { clampLimit, fetchSearchPair } from '@/lib/scraper';
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
